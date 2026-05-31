@@ -103,10 +103,13 @@ Configure the following keys in your `.env` file (copied from `.env.example`):
    ```bash
    uvicorn ingest.main:app --reload --port 8080
    ```
-5. Set up an HTTP tunnel (such as localtunnel or ngrok) to expose port `8080` to the internet.
+5. Set up an HTTP tunnel to expose port `8080` to the internet (for example, using localtunnel):
+   ```bash
+   npx localtunnel --port 8080
+   ```
 6. Register the webhook in your GitLab Project's **Settings → Webhooks**:
-   * **URL**: `https://<your-tunnel-subdomain>/webhook`
-   * **Secret token**: Your configured `WEBHOOK_SECRET`.
+   * **URL**: `https://<your-tunnel-subdomain>.loca.lt/webhook` (append `/webhook` to your tunnel URL)
+   * **Secret token**: Your configured `WEBHOOK_SECRET` value from `.env`.
    * **Trigger**: Check **Merge request events** only.
 
 ---
