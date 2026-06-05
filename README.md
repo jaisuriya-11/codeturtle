@@ -54,3 +54,18 @@ codeturtle status
 ## Config
 
 Everything lives in `~/.codeturtle/` — `credentials.json`, `config.json`, `watcher.log`. Env vars (`GITHUB_TOKEN`, `GITLAB_TOKEN`, `REVIEWER_API_KEY`, `REVIEWER_BASE_URL`, `REVIEWER_MODEL`) override the store.
+
+## Documentation
+
+Full developer docs live in [`docs/`](docs/README.md) — architecture, a per-module engine
+reference, the TUI components, configuration, and the hard invariants. Start at
+[`docs/README.md`](docs/README.md).
+
+## Contributing
+
+Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) for guidelines on how to get started.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
