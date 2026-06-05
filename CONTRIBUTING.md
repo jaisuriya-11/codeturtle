@@ -103,17 +103,28 @@ Some rules are **not** stylistic — breaking them is a bug. Please read the ful
 Before submitting your pull request, please verify:
 
 ```bash
-# 1. Ensure type-checking passes with no warnings
-npx tsc --noEmit
+# 1. Type-check (covers src + co-located tests), must be clean
+npm run typecheck
 
-# 2. Ensure the bundler builds successfully
+# 2. Run the test suite (Vitest), must pass
+npm test          # add `npm run test:cov` for a coverage report
+
+# 3. Ensure the bundler builds successfully
 npm run build
 
-# 3. Smoke-test the built CLI
+# 4. Smoke-test the built CLI
 node dist/cli.js status
 ```
 
-> There is no test framework yet. To smoke-test a TUI component headlessly, use
+### Tests
+
+Specs live next to the code in `src/**/__tests__/*.test.ts` (Vitest). The seven hard invariants
+above are locked in `src/engine/__tests__/invariants.test.ts`. **When you change engine logic or
+touch an invariant, add or update the matching test.** Shared fixtures live in
+`src/engine/__tests__/helpers/` (`tmpHome`, `fakeForge`, `fetchMock`). CI runs typecheck + build +
+tests on every push/PR (`.github/workflows/ci.yml`).
+
+> To smoke-test a TUI component headlessly, use
 > [`ink-testing-library`](https://github.com/vadimdemedes/ink-testing-library) in a throwaway
 > `src/tui-smoke.tsx` run with `npx tsx` (`render(...)` → `lastFrame()`), then delete it.
 
