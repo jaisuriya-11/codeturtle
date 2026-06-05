@@ -6,6 +6,10 @@ These are the rules that keep Code Turtle correct and safe. **Breaking one is a 
 refactor.** They are mirrored from [`AGENTS.md`](../AGENTS.md) with pointers into the code and
 the rest of these docs. Read this before touching the engine.
 
+> **Each invariant is locked by a test.** `src/engine/__tests__/invariants.test.ts` encodes all
+> seven against the real code, so a change that violates one fails CI. If you intentionally change
+> an invariant, update this doc, `AGENTS.md`, and the matching test together.
+
 ## 1. Markers are the idempotency system
 
 Every bot artifact carries a hidden HTML marker:

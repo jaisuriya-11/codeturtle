@@ -6,6 +6,10 @@ The engine is all of the business logic. **No module here imports from `tui/` or
 `ink`/`react`.** Errors in "soft" forge calls return `null` and log; pipeline-level failures
 mark the PR failed and always release the lock in a `finally`.
 
+> Each module has co-located [Vitest](https://vitest.dev) specs in `src/engine/__tests__/`
+> (e.g. `prLink.test.ts`). The seven hard invariants are locked in `invariants.test.ts`. See
+> [Getting Started › Testing](./getting-started.md#testing).
+
 Jump to: [pipeline](#pipelinets) · [types](#typests) · [config](#configts) ·
 [providers](#providersts) · [prLink](#prlinkts) · [forge](#forgets) · [forgeMcp](#forgemcpts) ·
 [norms](#normsts) · [repoFiles](#repofilests) · [bundler](#bundlerts) · [reviewer](#reviewerts) ·
