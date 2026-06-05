@@ -14,10 +14,13 @@ export const PID_FILE = join(HOME, "watcher.pid");
 
 export interface ForgeCred {
   token?: string;
-  method?: string;
+  method?: string; // "pat" | "gh" | "oauth"
   user?: string;
   url?: string;
   backend?: "mcp" | "rest";
+  refresh_token?: string; // oauth device flow — refresh grant
+  expires_at?: number; // oauth — access-token expiry, ms epoch
+  client_id?: string; // oauth — the app client id used to obtain/refresh the token
 }
 
 export interface ReviewerConfig {
