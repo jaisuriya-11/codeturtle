@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck (also covers co-located tests)
+        run: npm run typecheck
+      - name: Build
+        run: npx tsup
+      - name: Test (with coverage thresholds)
+        run: npm run test:cov

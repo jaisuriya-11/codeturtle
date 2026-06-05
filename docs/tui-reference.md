@@ -30,16 +30,24 @@ The router. On mount it computes `needsSetup` = no forge configured **or** no re
 
 ## `Setup.tsx`
 
-The first-run wizard. Steps: `model → github → githubKey → githubRepo → githubRepoManual →
-gitlab → gitlabKey → done`.
+The first-run wizard. Steps: `model → connect → (githubDevice | githubKey | gitlabKey) →
+githubRepo → githubRepoManual → connected → done`.
+
+You **authenticate once**: the `connect` step is a single menu, and after one successful
+connection you land on the `connected` hub. There is **no forced GitLab gate** — the old
+`model → github → … → gitlab` two-gate flow was the source of the "can't skip GitLab" bug.
 
 - **Model** — delegates to `<ModelPicker>`, writes the `reviewer` config section.
-- **GitHub** — three choices: reuse the `gh auth token` CLI session (`ghCliToken()` shells out
-  to `gh`), paste a PAT, or skip. Tokens are validated against `GET /user` and stored with
-  `backend: "mcp"`.
-- **Repo** — fetches your GitHub repos (`/user/repos?sort=pushed`) and lets you pick one (or type
-  it) to seed `watch.targets` as `github:owner/repo`.
-- **GitLab** — optional PAT, validated against `{url}/api/v4/user`, stored with `backend: "rest"`.
+- **Connect** — one menu listing every auth method: *Sign in with GitHub (OAuth)* (device flow;
+  needs `GITHUB_CLIENT_ID`), *gh CLI session* (`ghCliToken()`), *paste a GitHub PAT*, *connect
+  GitLab (token)*. The last item is context-aware: `Skip — set up later` when nothing is
+  connected yet, `← Back` once a forge is connected. GitHub tokens validate against `GET /user`
+  (`backend: "mcp"`); GitLab against `{url}/api/v4/user` (`backend: "rest"`).
+- **GitHub repo** — fetches your repos (`/user/repos?sort=pushed`) and lets you pick one (or type
+  it) to seed `watch.targets` as `github:owner/repo`, then → `connected`.
+- **Connected** — the finish hub. The default item is **Finish** (one Enter → dashboard); the
+  second is **Connect another forge** (→ back to `connect`), so multi-forge stays possible without
+  a reset.
 
 `isConfigured()` (exported) is the predicate `App` uses: true if any forge token exists in the
 store or env.

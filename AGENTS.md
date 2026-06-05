@@ -15,7 +15,9 @@ user's machine, triggered by pasting a PR link in the TUI or by polling watched 
 - GitHub I/O: official GitHub remote MCP server (`@modelcontextprotocol/sdk`)
 - GitLab I/O: REST v4
 - LLM: `openai` SDK pointed at any compatible base URL
-- Build: `tsup` → `dist/cli.js` (single bin). No test framework yet.
+- Build: `tsup` → `dist/cli.js` (single bin).
+- Tests: **Vitest** (`npm test`). Specs are co-located in `src/**/__tests__/*.test.ts`; the
+  seven hard invariants below are locked in `src/engine/__tests__/invariants.test.ts`.
 
 ## Map
 
@@ -90,11 +92,15 @@ Data flow: `cli|tui → pipeline.runReview(job) → forge client → bundler →
 ## Verify before you're done
 
 ```bash
-npx tsc --noEmit     # must be clean
+npm run typecheck    # tsc --noEmit — must be clean (covers src + co-located tests)
+npm test             # Vitest — must pass
 npx tsup             # must build
 node dist/cli.js status
 node dist/cli.js review <a-real-PR-link>   # only with user consent — posts real comments
 ```
+
+When you change engine logic or touch a hard invariant, add or update the matching test under
+`src/**/__tests__/`. CI (`.github/workflows/ci.yml`) runs typecheck + build + tests on every push/PR.
 
 TUI can't run in non-TTY contexts; smoke-test components headlessly with
 `ink-testing-library` (`render(...)` → `lastFrame()`), via a throwaway `src/tui-smoke.tsx`

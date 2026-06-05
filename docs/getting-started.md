@@ -26,17 +26,38 @@ cd turtle-code
 npm install
 
 # build the single-file CLI
-npx tsup                # → dist/cli.js  (shebang banner added automatically)
+npm run build           # tsup → dist/cli.js  (shebang banner added automatically)
 
-# type-check without emitting
-npx tsc --noEmit
+# type-check without emitting (covers src + co-located tests)
+npm run typecheck
+
+# run the test suite (Vitest)
+npm test                # add `npm run test:cov` for a coverage report
 
 # run the built CLI
 node dist/cli.js status
 ```
 
-> `package.json` scripts: `build` → `tsup`, `prepublishOnly` → `tsup`. There is no real
-> `test` script yet (it intentionally exits 1).
+> `package.json` scripts: `build` → `tsup`, `typecheck` → `tsc --noEmit`, `test` → `vitest run`,
+> `test:watch`, `test:cov`. See the [Testing](#testing) section below and
+> [Contributing](../CONTRIBUTING.md#tests) for the layout and conventions.
+
+## Testing
+
+Specs are **co-located** with the code in `src/**/__tests__/*.test.ts` and run with
+[Vitest](https://vitest.dev). The seven hard invariants are locked in
+`src/engine/__tests__/invariants.test.ts`; shared fixtures live in
+`src/engine/__tests__/helpers/` (`tmpHome`, `fakeForge`, `fetchMock`).
+
+```bash
+npm test            # run once
+npm run test:watch  # watch mode
+npm run test:cov    # with coverage (thresholds enforced)
+```
+
+Coverage floors are configured in `vitest.config.ts` and enforced in CI
+(`.github/workflows/ci.yml` runs typecheck + build + `test:cov` on every push/PR). When you change
+engine logic or touch an invariant, add or update the matching test.
 
 ## First-run setup (TUI wizard)
 
@@ -45,12 +66,17 @@ Running `codeturtle` with no config launches the [`Setup`](./tui-reference.md#se
 1. **Pick a provider & model** — Gemini, Anthropic, OpenAI, OpenRouter, Groq, Ollama (local),
    LM Studio (local), or a custom OpenAI-compatible endpoint. Local servers get live model
    detection. See [`providers.ts`](./engine-reference.md#providersts).
-2. **Connect GitHub** — three options: **Sign in with GitHub (OAuth device flow)** — shown when
-   `GITHUB_CLIENT_ID` is set; you open `github.com/login/device`, enter the code, and Code Turtle
-   polls for the token (refreshed automatically) — or reuse your `gh auth token` session, or paste
-   a personal access token (scope: `repo`). GitHub uses the **MCP** backend by default.
-3. **Connect GitLab** (optional) — paste a PAT (scope: `api`). Set `GITLAB_URL` for self-hosted.
-4. **Pick a repo to watch** — stored as `forge:repo` targets, e.g. `github:owner/repo`.
+2. **Connect a forge (once)** — a single menu with every auth method:
+   - **Sign in with GitHub (OAuth device flow)** — shown when `GITHUB_CLIENT_ID` is set; you open
+     `github.com/login/device`, enter the code, and Code Turtle polls for the token (refreshed
+     automatically).
+   - **GitHub `gh` CLI session** (reuses `gh auth token`) or **a pasted GitHub PAT** (scope: `repo`).
+   - **GitLab token** (scope: `api`; set `GITLAB_URL` for self-hosted).
+
+   You only need **one** of these. GitHub uses the **MCP** backend by default.
+3. **Pick a repo to watch** — for a GitHub connection, choose one (stored as `github:owner/repo`).
+4. **Finish** — you land on a "connected" screen; press Enter to finish, or choose **Connect
+   another forge** if you want both GitHub and GitLab.
 
 Everything is written to `~/.codeturtle/` with `chmod 600`. See [Configuration](./configuration.md).
 
