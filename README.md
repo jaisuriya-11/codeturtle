@@ -61,6 +61,10 @@ Full developer docs live in [`docs/`](docs/README.md) — architecture, a per-mo
 reference, the TUI components, configuration, and the hard invariants. Start at
 [`docs/README.md`](docs/README.md).
 
+## Demo
+<img width="1694" height="949" alt="Screenshot 2026-06-05 at 2 43 53 PM" src="https://github.com/user-attachments/assets/b79b48b4-b89a-497e-998f-01ae28caed5a" />
+
+
 ## Contributing
 
 Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) for guidelines on how to get started.
