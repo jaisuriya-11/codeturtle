@@ -4,7 +4,10 @@
   "description": "Local AI code reviewer for GitHub & GitLab — any model, no cloud",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
     "build": "tsup",
     "prepublishOnly": "tsup"
   },
@@ -30,9 +33,11 @@
   "devDependencies": {
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.16",
+    "@vitest/coverage-v8": "^4.1.8",
     "ink-testing-library": "^4.0.0",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   },
   "files": [
     "dist"
