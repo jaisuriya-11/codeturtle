@@ -45,8 +45,10 @@ Running `codeturtle` with no config launches the [`Setup`](./tui-reference.md#se
 1. **Pick a provider & model** — Gemini, Anthropic, OpenAI, OpenRouter, Groq, Ollama (local),
    LM Studio (local), or a custom OpenAI-compatible endpoint. Local servers get live model
    detection. See [`providers.ts`](./engine-reference.md#providersts).
-2. **Connect GitHub** — reuse your `gh auth token` session automatically, or paste a personal
-   access token (scope: `repo`). GitHub uses the **MCP** backend by default.
+2. **Connect GitHub** — three options: **Sign in with GitHub (OAuth device flow)** — shown when
+   `GITHUB_CLIENT_ID` is set; you open `github.com/login/device`, enter the code, and Code Turtle
+   polls for the token (refreshed automatically) — or reuse your `gh auth token` session, or paste
+   a personal access token (scope: `repo`). GitHub uses the **MCP** backend by default.
 3. **Connect GitLab** (optional) — paste a PAT (scope: `api`). Set `GITLAB_URL` for self-hosted.
 4. **Pick a repo to watch** — stored as `forge:repo` targets, e.g. `github:owner/repo`.
 

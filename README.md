@@ -16,7 +16,7 @@ codeturtle          # opens the TUI — first run walks you through setup
 
 First run:
 1. **Pick a provider** — Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama (local), LM Studio (local), or any custom OpenAI-compatible endpoint. Local servers get live model detection.
-2. **Connect GitHub** — uses your `gh` CLI session automatically, or paste a PAT. GitLab optional.
+2. **Connect GitHub** — sign in with GitHub (OAuth device flow, set `GITHUB_CLIENT_ID`), use your `gh` CLI session automatically, or paste a PAT. GitLab optional.
 3. **Pick repos to watch** — `github:owner/repo gitlab:12345`
 
 Then the dashboard watches your repos: every new PR and every push gets reviewed automatically. Inline comments + a summary review land on the PR, deduped across runs.

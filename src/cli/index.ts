@@ -55,8 +55,11 @@ program
     const creds = loadCredentials();
     for (const forge of ["github", "gitlab"]) {
       const c = creds[forge];
-      if (c?.user) console.log(`${forge.padEnd(10)} ✓ ${c.user} (${c.method}, ${c.backend})`);
-      else if (process.env[`${forge.toUpperCase()}_TOKEN`]) console.log(`${forge.padEnd(10)} ✓ token from env`);
+      if (c?.user) {
+        const expired = c.method === "oauth" && c.expires_at != null && c.expires_at < Date.now();
+        const note = expired ? " · token expired (refreshes on next use)" : "";
+        console.log(`${forge.padEnd(10)} ✓ ${c.user} (${c.method}, ${c.backend})${note}`);
+      } else if (process.env[`${forge.toUpperCase()}_TOKEN`]) console.log(`${forge.padEnd(10)} ✓ token from env`);
       else console.log(`${forge.padEnd(10)} ✗ not connected`);
     }
     const rs = reviewerSettings();
