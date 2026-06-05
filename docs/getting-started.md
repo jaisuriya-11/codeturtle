@@ -45,12 +45,17 @@ Running `codeturtle` with no config launches the [`Setup`](./tui-reference.md#se
 1. **Pick a provider & model** — Gemini, Anthropic, OpenAI, OpenRouter, Groq, Ollama (local),
    LM Studio (local), or a custom OpenAI-compatible endpoint. Local servers get live model
    detection. See [`providers.ts`](./engine-reference.md#providersts).
-2. **Connect GitHub** — three options: **Sign in with GitHub (OAuth device flow)** — shown when
-   `GITHUB_CLIENT_ID` is set; you open `github.com/login/device`, enter the code, and Code Turtle
-   polls for the token (refreshed automatically) — or reuse your `gh auth token` session, or paste
-   a personal access token (scope: `repo`). GitHub uses the **MCP** backend by default.
-3. **Connect GitLab** (optional) — paste a PAT (scope: `api`). Set `GITLAB_URL` for self-hosted.
-4. **Pick a repo to watch** — stored as `forge:repo` targets, e.g. `github:owner/repo`.
+2. **Connect a forge (once)** — a single menu with every auth method:
+   - **Sign in with GitHub (OAuth device flow)** — shown when `GITHUB_CLIENT_ID` is set; you open
+     `github.com/login/device`, enter the code, and Code Turtle polls for the token (refreshed
+     automatically).
+   - **GitHub `gh` CLI session** (reuses `gh auth token`) or **a pasted GitHub PAT** (scope: `repo`).
+   - **GitLab token** (scope: `api`; set `GITLAB_URL` for self-hosted).
+
+   You only need **one** of these. GitHub uses the **MCP** backend by default.
+3. **Pick a repo to watch** — for a GitHub connection, choose one (stored as `github:owner/repo`).
+4. **Finish** — you land on a "connected" screen; press Enter to finish, or choose **Connect
+   another forge** if you want both GitHub and GitLab.
 
 Everything is written to `~/.codeturtle/` with `chmod 600`. See [Configuration](./configuration.md).
 
