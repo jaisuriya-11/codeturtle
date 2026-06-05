@@ -10,20 +10,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { loadConfig, loadCredentials, resetAll, reviewerSettings, updateConfig } from "../engine/config.js";
 import { runReview } from "../engine/pipeline.js";
 import { parsePrLink } from "../engine/prLink.js";
-import { watch } from "../engine/watch.js";
+import { parseTarget, watch } from "../engine/watch.js";
+import type { Forge } from "../engine/types.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { RepoPicker } from "./RepoPicker.js";
+import { ReviewViewer } from "./ReviewViewer.js";
+import { fetchOpenPrs } from "../engine/viewer.js";
 import { ACCENT, DIM, Header, KeyHint } from "./theme.js";
 
 interface ReviewItem {
   key: string;
   label: string;
+  forge: Forge;
+  projectId: string;
   prNumber: number;
   status: "running" | "done" | "failed";
   detail: string;
 }
 
-type Overlay = "none" | "settings" | "model" | "repos" | "confirmReset";
+type Overlay = "none" | "settings" | "model" | "repos" | "confirmReset" | "selectReview" | "viewReview";
 
 const ts = () => new Date().toLocaleTimeString();
 
@@ -40,6 +45,13 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
   const abortRef = useRef<AbortController | null>(null);
   const [sessionRepoSelected, setSessionRepoSelected] = useState(false);
   const [activeSessionTargets, setActiveSessionTargets] = useState<string[]>([]);
+  const [selectReviewStep, setSelectReviewStep] = useState<"menu" | "paste" | "recent" | "repos" | "prs">("menu");
+  const [selectedRepo, setSelectedRepo] = useState<string>("");
+  const [prsList, setPrsList] = useState<{ iid: number }[]>([]);
+  const [loadingPrs, setLoadingPrs] = useState(false);
+  const [prsError, setPrsError] = useState<string | null>(null);
+  const [selectedPr, setSelectedPr] = useState<{ forge: Forge; projectId: string; prNumber: number } | null>(null);
+  const [viewInputUrl, setViewInputUrl] = useState("");
 
   const creds = loadCredentials();
   const interval = loadConfig().watch?.interval ?? 30;
@@ -90,6 +102,8 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
             {
               key: `auto:${job.projectId}#${job.prNumber}:${Date.now()}`,
               label: `${job.projectId}#${job.prNumber}`,
+              forge: job.forge,
+              projectId: job.projectId,
               prNumber: job.prNumber,
               status: "running",
               detail: "auto · reviewing…",
@@ -116,7 +130,15 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
       const key = `paste:${ref.label}:${Date.now()}`;
       setReviews((prev) => [
         ...prev,
-        { key, label: ref.label, prNumber: ref.prNumber, status: "running", detail: "fetching…" },
+        {
+          key,
+          label: ref.label,
+          forge: ref.forge,
+          projectId: ref.projectId,
+          prNumber: ref.prNumber,
+          status: "running",
+          detail: "fetching…",
+        },
       ]);
       addEvent(`manual review ${ref.label}`);
 
@@ -145,9 +167,31 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
     [addEvent, patchByPr, watchLog],
   );
 
-  useInput((_input, key) => {
-    if (overlay === "none" && key.escape) setOverlay("settings");
-    else if (overlay === "settings" && key.escape) setOverlay("none");
+  useInput((input, key) => {
+    if (overlay === "none") {
+      if (key.escape) {
+        setOverlay("settings");
+      } else if (input === "v") {
+        setOverlay("selectReview");
+        setSelectReviewStep("menu");
+        setViewInputUrl("");
+        setPrsError(null);
+      }
+    } else if (overlay === "settings") {
+      if (key.escape) {
+        setOverlay("none");
+      }
+    } else if (overlay === "selectReview") {
+      if (key.escape) {
+        if (selectReviewStep === "menu") {
+          setOverlay("none");
+        } else if (selectReviewStep === "prs") {
+          setSelectReviewStep("repos");
+        } else {
+          setSelectReviewStep("menu");
+        }
+      }
+    }
   });
 
   // ---- overlays ----------------------------------------------------------------
@@ -222,6 +266,214 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
     );
   }
 
+  if (overlay === "selectReview") {
+    return (
+      <Box flexDirection="column">
+        <Header subtitle="View PR Review" />
+
+        {selectReviewStep === "menu" && (
+          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+            <Text bold color={ACCENT}>Select how to find the PR review:</Text>
+            <Box marginTop={1}>
+              <SelectInput
+                items={[
+                  { label: "← Back to Dashboard", value: "back" },
+                  { label: "Paste a PR/MR Link", value: "paste" },
+                  ...(reviews.some((r) => r.status === "done" || r.status === "failed")
+                    ? [{ label: "Select from recent reviews in this session", value: "recent" }]
+                    : []),
+                  ...(targets.length > 0
+                    ? [{ label: "Select from watched repositories", value: "repos" }]
+                    : []),
+                ]}
+                onSelect={(item) => {
+                  if (item.value === "back") {
+                    setOverlay("none");
+                  } else if (item.value === "paste" || item.value === "recent" || item.value === "repos") {
+                    setSelectReviewStep(item.value);
+                  }
+                }}
+              />
+            </Box>
+          </Box>
+        )}
+
+        {selectReviewStep === "paste" && (
+          <Box flexDirection="column">
+            {prsError ? <Text color="red">{prsError}</Text> : null}
+            <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+              <Text bold color={ACCENT}>Paste PR/MR URL to view review:</Text>
+              <Box marginTop={1} flexDirection="row">
+                <Text color={ACCENT}>{"❯ "}</Text>
+                <TextInput
+                  value={viewInputUrl}
+                  onChange={setViewInputUrl}
+                  placeholder="paste link and press enter"
+                  onSubmit={(val) => {
+                    const parsed = parsePrLink(val.trim());
+                    if (!parsed) {
+                      setPrsError("Invalid PR/MR link format.");
+                      return;
+                    }
+                    setSelectedPr({
+                      forge: parsed.forge,
+                      projectId: parsed.projectId,
+                      prNumber: parsed.prNumber,
+                    });
+                    setOverlay("viewReview");
+                  }}
+                />
+              </Box>
+            </Box>
+            <Box marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1}>
+              <KeyHint keys={[["enter", "submit link"], ["esc", "back to menu"]]} />
+            </Box>
+          </Box>
+        )}
+
+        {selectReviewStep === "recent" && (
+          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+            <Text bold color={ACCENT}>Select a recent review:</Text>
+            <Box marginTop={1}>
+              <SelectInput
+                items={[
+                  { label: "← Back", value: "back" },
+                  ...reviews
+                    .filter((r) => r.status === "done" || r.status === "failed")
+                    .map((r) => ({
+                      label: `${r.projectId}#${r.prNumber} (${r.status}) - ${r.detail}`,
+                      value: r.key,
+                    })),
+                ]}
+                onSelect={(item) => {
+                  if (item.value === "back") {
+                    setSelectReviewStep("menu");
+                  } else {
+                    const r = reviews.find((x) => x.key === item.value);
+                    if (r) {
+                      setSelectedPr({
+                        forge: r.forge,
+                        projectId: r.projectId,
+                        prNumber: r.prNumber,
+                      });
+                      setOverlay("viewReview");
+                    }
+                  }
+                }}
+              />
+            </Box>
+          </Box>
+        )}
+
+        {selectReviewStep === "repos" && (
+          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+            <Text bold color={ACCENT}>Select repository to query open PRs:</Text>
+            <Box marginTop={1}>
+              <SelectInput
+                items={[
+                  { label: "← Back", value: "back" },
+                  ...targets.map((t) => ({ label: t, value: t })),
+                ]}
+                onSelect={async (item) => {
+                  if (item.value === "back") {
+                    setSelectReviewStep("menu");
+                  } else {
+                    setSelectedRepo(item.value);
+                    setLoadingPrs(true);
+                    setPrsError(null);
+                    setSelectReviewStep("prs");
+                    try {
+                      const { forge, repo } = parseTarget(item.value);
+                      const prs = await fetchOpenPrs(forge, repo);
+                      setPrsList(prs);
+                    } catch (err) {
+                      setPrsError(err instanceof Error ? err.message : "Failed to load open PRs");
+                    } finally {
+                      setLoadingPrs(false);
+                    }
+                  }
+                }}
+              />
+            </Box>
+          </Box>
+        )}
+
+        {selectReviewStep === "prs" && (
+          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+            <Text bold color={ACCENT}>Select open PR for {selectedRepo}:</Text>
+            {loadingPrs ? (
+              <Box marginTop={1}>
+                <Text color={ACCENT}>
+                  <Spinner type="dots" />
+                </Text>
+                <Text> Querying open PRs/MRs...</Text>
+              </Box>
+            ) : prsError ? (
+              <Box marginTop={1} flexDirection="column">
+                <Text color="red">Error: {prsError}</Text>
+                <Box marginTop={1}>
+                  <SelectInput
+                    items={[{ label: "← Back to watched repos", value: "back" }]}
+                    onSelect={() => setSelectReviewStep("repos")}
+                  />
+                </Box>
+              </Box>
+            ) : prsList.length === 0 ? (
+              <Box marginTop={1} flexDirection="column">
+                <Text color="yellow">No open PRs/MRs found in this repository.</Text>
+                <Box marginTop={1}>
+                  <SelectInput
+                    items={[{ label: "← Back to watched repos", value: "back" }]}
+                    onSelect={() => setSelectReviewStep("repos")}
+                  />
+                </Box>
+              </Box>
+            ) : (
+              <Box marginTop={1}>
+                <SelectInput
+                  items={[
+                    { label: "← Back to watched repos", value: "back" },
+                    ...prsList.map((pr) => ({
+                      label: `PR #${pr.iid}`,
+                      value: String(pr.iid),
+                    })),
+                  ]}
+                  onSelect={(item) => {
+                    if (item.value === "back") {
+                      setSelectReviewStep("repos");
+                    } else {
+                      const { forge, repo } = parseTarget(selectedRepo);
+                      setSelectedPr({
+                        forge,
+                        projectId: repo,
+                        prNumber: parseInt(item.value, 10),
+                      });
+                      setOverlay("viewReview");
+                    }
+                  }}
+                />
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  }
+
+  if (overlay === "viewReview" && selectedPr) {
+    return (
+      <ReviewViewer
+        forge={selectedPr.forge}
+        projectId={selectedPr.projectId}
+        prNumber={selectedPr.prNumber}
+        onBack={() => {
+          setOverlay("selectReview");
+          setSelectReviewStep("menu");
+        }}
+      />
+    );
+  }
+
   if (overlay === "settings") {
     return (
       <Box flexDirection="column">
@@ -230,6 +482,7 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
           <SelectInput
             items={[
               { label: "← Back", value: "back" },
+              { label: "View PR reviews", value: "view_reviews" },
               { label: `Auto-review repos  (${targets.length} watched)`, value: "repos" },
               { label: `Change model  (${model})`, value: "model" },
               { label: "Reset all config", value: "reset" },
@@ -237,6 +490,12 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
             ]}
             onSelect={(item) => {
               if (item.value === "back") setOverlay("none");
+              else if (item.value === "view_reviews") {
+                setSelectReviewStep("menu");
+                setViewInputUrl("");
+                setPrsError(null);
+                setOverlay("selectReview");
+              }
               else if (item.value === "repos") setOverlay("repos");
               else if (item.value === "model") setOverlay("model");
               else if (item.value === "reset") setOverlay("confirmReset");
@@ -365,7 +624,7 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
           />
         </Box>
         <Box marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1}>
-          <KeyHint keys={[["enter", "review pasted link"], ["esc", "settings"]]} />
+          <KeyHint keys={[["enter", "review pasted link"], ["v", "view review"], ["esc", "settings"]]} />
         </Box>
       </Box>
     </Box>
