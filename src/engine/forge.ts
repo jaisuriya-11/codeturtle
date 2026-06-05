@@ -331,6 +331,9 @@ export class GitHubRestClient implements ForgeClient {
 
 export async function getForgeClient(forge: string): Promise<ForgeClient> {
   if (forge === "github") {
+    // oauth tokens may have expired — refresh before either client reads it.
+    const { ensureFreshGithubToken } = await import("./githubAuth.js");
+    await ensureFreshGithubToken();
     if ((process.env.GITHUB_BACKEND ?? "mcp").toLowerCase() !== "rest") {
       const { GitHubMcpClient } = await import("./forgeMcp.js");
       return new GitHubMcpClient();
