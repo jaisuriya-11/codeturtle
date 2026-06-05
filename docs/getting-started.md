@@ -26,17 +26,38 @@ cd turtle-code
 npm install
 
 # build the single-file CLI
-npx tsup                # → dist/cli.js  (shebang banner added automatically)
+npm run build           # tsup → dist/cli.js  (shebang banner added automatically)
 
-# type-check without emitting
-npx tsc --noEmit
+# type-check without emitting (covers src + co-located tests)
+npm run typecheck
+
+# run the test suite (Vitest)
+npm test                # add `npm run test:cov` for a coverage report
 
 # run the built CLI
 node dist/cli.js status
 ```
 
-> `package.json` scripts: `build` → `tsup`, `prepublishOnly` → `tsup`. There is no real
-> `test` script yet (it intentionally exits 1).
+> `package.json` scripts: `build` → `tsup`, `typecheck` → `tsc --noEmit`, `test` → `vitest run`,
+> `test:watch`, `test:cov`. See the [Testing](#testing) section below and
+> [Contributing](../CONTRIBUTING.md#tests) for the layout and conventions.
+
+## Testing
+
+Specs are **co-located** with the code in `src/**/__tests__/*.test.ts` and run with
+[Vitest](https://vitest.dev). The seven hard invariants are locked in
+`src/engine/__tests__/invariants.test.ts`; shared fixtures live in
+`src/engine/__tests__/helpers/` (`tmpHome`, `fakeForge`, `fetchMock`).
+
+```bash
+npm test            # run once
+npm run test:watch  # watch mode
+npm run test:cov    # with coverage (thresholds enforced)
+```
+
+Coverage floors are configured in `vitest.config.ts` and enforced in CI
+(`.github/workflows/ci.yml` runs typecheck + build + `test:cov` on every push/PR). When you change
+engine logic or touch an invariant, add or update the matching test.
 
 ## First-run setup (TUI wizard)
 

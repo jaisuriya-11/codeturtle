@@ -49,7 +49,7 @@ both call it; the watcher calls it on every new PR / push. See
 - **GitLab I/O:** REST v4
 - **LLM:** the `openai` SDK pointed at any compatible base URL
 - **Build:** [`tsup`](https://tsup.egoist.dev/) → `dist/cli.js` (single bin)
-- **Tests:** no framework yet — see [Contributing](../CONTRIBUTING.md#verification-checklist) for the smoke-test approach
+- **Tests:** [Vitest](https://vitest.dev) — specs co-located in `src/**/__tests__/`, invariants locked in `invariants.test.ts`, coverage enforced in CI. See [Getting Started › Testing](./getting-started.md#testing)
 
 > These docs were generated from the source on the `dev-sam` branch. When code and docs
 > disagree, the code wins — please open a PR to fix the doc.
