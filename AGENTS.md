@@ -32,7 +32,8 @@ src/
 │   ├── forge.ts          ForgeClient interface + GitLab REST + GitHub REST fallback + markers
 │   ├── forgeMcp.ts       GitHub via MCP. Pending-review flow. Default GitHub backend.
 │   ├── forgeCommits.ts   commit-level REST ops: branches, push diffs, commit comments
-│   ├── norms.ts          defaults <- repo .codeturtle.yml merge, exclude globs
+│   ├── norms.ts          layered norms: defaults <- global config & packs <- repo .codeturtle.yml; exclude globs
+│   ├── normsRegistry.ts  norm "plugins": load *.yml packs + *.mjs transforms from ~/.codeturtle/norms; mergeNorms; safePackName
 │   ├── repoFiles.ts      pure heuristics: imports, exported symbols, test paths
 │   ├── bundler.ts        context bundle: changed files + imports + callers + tests, ranked, budgeted
 │   ├── reviewer.ts       LLM call, strict JSON parse, finding validation
@@ -63,8 +64,11 @@ Data flow: `cli|tui → pipeline.runReview(job)|runPushReview(job) → forge cli
    tolerance; never change marker formats (breaks dedup against already-posted comments).
    Push reviews reuse the same markers on commit comments, deduped per head commit.
 2. **Security: repo config is untrusted.** `norms.ts` strips `agent` and `key_ref` from
-   `.codeturtle.yml` — a PR author must never redirect the reviewer or exfiltrate keys.
-   Keep stripping; never add a way for repo files to set URLs/keys/commands.
+   `.codeturtle.yml` — a PR author must never redirect the reviewer or exfiltrate keys. A repo's
+   `extends` resolves to installed packs **by safe bare name only** (`safePackName` — no path
+   traversal), and a repo can **never** activate a code transform (`.mjs` runs only from the
+   global `norms.use`). Keep all of this; never add a way for repo files to set URLs/keys/commands
+   or to run code.
 3. **Secrets stay in `~/.codeturtle/` with chmod 600.** Never log tokens or API keys, never
    write them anywhere else, never echo them in errors or TUI. Env vars override store.
 4. **`~/.codeturtle` file shapes are a compatibility contract** (credentials.json, config.json).
@@ -126,7 +130,9 @@ run with `npx tsx` — delete it afterwards.
 ## Domain glossary
 
 - **forge** — git host (github | gitlab). `projectId`: GitHub `owner/repo`, GitLab path or numeric ID.
-- **norms** — review rules: defaults merged with target repo's `.codeturtle.yml`.
+- **norms** — review rules, layered: defaults ← global config & packs ← target repo's
+  `.codeturtle.yml` (project wins). **pack** = named `*.yml` rule set; **transform** = `*.mjs`
+  code plugin — both in `~/.codeturtle/norms/`, loaded by `normsRegistry.ts`.
 - **context bundle** — files the LLM sees beyond the diff (changed files, imports, callers, tests),
   ranked changed > import > caller > test, budgeted by `limits` in config.ts.
 - **finding** — one review comment: file, line, severity (critical|warning|info),

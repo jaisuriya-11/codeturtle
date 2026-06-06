@@ -199,19 +199,43 @@ The defining constraint: **the MCP server has no comment-edit tool.** Consequenc
 
 ## `norms.ts`
 
-Review rules: built-in `DEFAULTS` ← the target repo's `.codeturtle.yml` (last wins).
+Review rules, layered low→high: built-in `DEFAULTS` ← global config & packs ← the target repo's
+`.codeturtle.yml` (project wins). Code transforms run last.
 
-- `loadNorms(gl, projectId, mr)` — fetches `.codeturtle.yml` at the MR head and merges. **It
-  deletes `agent` and `key_ref` from the repo config** so a PR author can never redirect the
-  reviewer or exfiltrate a key. This is a hard [security invariant](./invariants.md#2-security-repo-config-is-untrusted).
+- `loadNorms(gl, projectId, mr, ctx?)` — assembles the layers, merges them via
+  [`normsRegistry.mergeNorms`](#normsregistryts), runs global-activated transforms, and returns a
+  **closed 6-field shape**. **It deletes `agent` and `key_ref` from the repo config**, restricts a
+  repo's `extends` to safe bare pack names, and never lets a repo run a transform — so a PR author
+  can't redirect the reviewer, exfiltrate a key, or execute code. Hard
+  [security invariant](./invariants.md#2-security-repo-config-is-untrusted). `ctx` (`{ forge,
+  diffLines }`) is passed through to transforms.
 - `DEFAULTS` — `confidenceThreshold: 0.7`, `maxFindings: 25`, a sensible `exclude` list
   (lockfiles, `*.min.js`, generated, `node_modules`, `dist`, `build`), all categories on, and a
   prioritised senior-engineer guideline string.
 - `isExcluded(path, norms)` / `applyExcludes(diffs, norms)` — glob matching via a small
   `globToRegex` (supports `**`, `*`, `?`); matches full path, `**/`-stripped path, and basename.
 
-Recognised repo keys: `confidence_threshold`, `max_findings`, `exclude`, `categories`,
-`guidelines`, `examples`. See [Configuration › per-repo norms](./configuration.md#per-repo-norms-codeturtleyml).
+Recognised keys (repo + global + packs): `confidence_threshold`, `max_findings`, `exclude`,
+`categories`, `guidelines`, `examples`; plus `extends` (repo) and `use` (global). See
+[Configuration › Custom norms](./configuration.md#custom-norms-global--packs--plugins).
+
+---
+
+## `normsRegistry.ts`
+
+The norm "plugin" system — loads reusable rule sets from `~/.codeturtle/norms/` and defines the
+layer-merge rules. No new dependency: reuses the `yaml` parser and native ESM `import()`.
+
+- `loadPacks()` — scan `*.yml` packs, key by `name:` (filename fallback); strips `agent`/`key_ref`,
+  skips malformed packs.
+- `loadTransforms(active)` — dynamic-`import()` the `*.mjs` modules named in `active` (the **global**
+  `use` list only); validate `export default { name?, transform(norms, ctx) }`; drop invalid ones.
+- `mergeNorms(base, layer, label?)` — scalars last-writer-wins; `categories` shallow-merge;
+  `exclude`/`examples` accumulate; `guidelines` append with a source label.
+- `safePackName(name)` — bare `[A-Za-z0-9_-]+` only; the wall that blocks a repo `extends` from
+  path-escaping the norms dir.
+- `closeShape(norms)` — rebuild the exact 6-field `Norms`, stripping any stray key a layer or
+  transform added (backs [invariant 2](./invariants.md#2-security-repo-config-is-untrusted)).
 
 ---
 
