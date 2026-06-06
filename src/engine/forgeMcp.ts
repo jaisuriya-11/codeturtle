@@ -1,23 +1,30 @@
 /** GitHub via the official remote MCP server. Inline findings accumulate on a
  * pending review; submitReview publishes them with the summary as ONE native
- * GitHub review. No comment-edit tool exists on this server, so there is no
- * sticky status note — postStatus returns a sentinel. */
+ * GitHub review. No comment-edit tool exists on this server, so the sticky
+ * status note ("reviewing… " → "complete") goes through a REST companion
+ * client with the same token — notes/status are REST, the review flow is MCP. */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { resolveToken } from "./config.js";
 import {
-  REVIEW_MARKER, STATUS_MARKER, type ForgeClient, type Note,
+  GitHubRestClient, REVIEW_MARKER, type ForgeClient, type Note,
 } from "./forge.js";
 import type { DiffRefs, FileDiff, MrInfo } from "./types.js";
 
 const MCP_URL = "https://api.githubcopilot.com/mcp/";
-const STATUS_SENTINEL = "mcp-status";
 
 export class GitHubMcpClient implements ForgeClient {
   private client: Client | null = null;
   private hasPending = new Set<string>();
+  private restCompanion: GitHubRestClient | null = null;
+
+  /** REST with the same token — covers what the MCP server can't (comment edits)
+   * and unifies note listing (issue + review comments) for marker dedup. */
+  private rest(): GitHubRestClient {
+    return (this.restCompanion ??= new GitHubRestClient());
+  }
 
   private async ensure(): Promise<Client> {
     if (this.client) return this.client;
@@ -110,20 +117,9 @@ export class GitHubMcpClient implements ForgeClient {
   }
 
   async listNotes(projectId: string, prNumber: number): Promise<Note[]> {
-    const { owner, repo } = this.split(projectId);
-    const notes: Note[] = [];
-    for (const method of ["get_comments", "get_review_comments"]) {
-      const d = await this.call("pull_request_read", {
-        method, owner, repo, pullNumber: prNumber, perPage: 100,
-      }, { soft: true });
-      if (d == null) continue;
-      if (Array.isArray(d)) {
-        for (const c of d) notes.push({ id: c?.id ?? null, body: c?.body ?? "" });
-      } else {
-        notes.push({ id: null, body: JSON.stringify(d) });
-      }
-    }
-    return notes;
+    // REST sees both issue comments and submitted review comments — the MCP
+    // tools miss some, which let already-posted findings repost (broken dedup).
+    return this.rest().listNotes(projectId, prNumber);
   }
 
   async createNote(projectId: string, prNumber: number, body: string) {
@@ -132,19 +128,13 @@ export class GitHubMcpClient implements ForgeClient {
     return d?.id ?? 0;
   }
 
-  async editNote(projectId: string, prNumber: number, _noteId: number | string, body: string) {
-    // No edit tool. Final summary goes out as a review; only terminal one-off
-    // messages land here. Post once, skip if already present.
-    const clean = body.replace(STATUS_MARKER, "").trim();
-    if (clean.includes("Review complete")) return;
-    for (const n of await this.listNotes(projectId, prNumber)) {
-      if (clean && n.body.includes(clean)) return;
-    }
-    await this.createNote(projectId, prNumber, clean);
+  async editNote(projectId: string, prNumber: number, noteId: number | string, body: string) {
+    return this.rest().editNote(projectId, prNumber, noteId, body);
   }
 
-  async postStatus(): Promise<string> {
-    return STATUS_SENTINEL; // can't edit later; submitted review is the visible outcome
+  async postStatus(projectId: string, prNumber: number, body: string) {
+    // visible progress in the PR conversation; finalize edits it on completion
+    return this.rest().postStatus(projectId, prNumber, body);
   }
 
   async postInlineNote(
@@ -157,7 +147,15 @@ export class GitHubMcpClient implements ForgeClient {
       const created = await this.call("pull_request_review_write", {
         method: "create", owner, repo, pullNumber: prNumber,
       }, { soft: true });
-      if (created == null) return false;
+      if (created == null) {
+        // a crashed run may have left a pending review (create fails while one
+        // exists) — reuse it so its comments finally publish on submit
+        const reviews = await this.call("pull_request_read", {
+          method: "get_reviews", owner, repo, pullNumber: prNumber, perPage: 100,
+        }, { soft: true });
+        const blob = reviews == null ? "" : typeof reviews === "string" ? reviews : JSON.stringify(reviews);
+        if (!blob.includes("PENDING")) return false;
+      }
       this.hasPending.add(key);
     }
     const added = await this.call("add_comment_to_pending_review", {
@@ -179,14 +177,20 @@ export class GitHubMcpClient implements ForgeClient {
       this.hasPending.delete(key);
       return submitted != null;
     }
-    // No new inline findings — only post a summary review if none of ours exists.
+    // No new inline findings this run.
     const reviews = await this.call("pull_request_read", {
       method: "get_reviews", owner, repo, pullNumber: prNumber, perPage: 100,
     }, { soft: true });
-    if (reviews != null) {
-      const blob = typeof reviews === "string" ? reviews : JSON.stringify(reviews);
-      if (blob.includes(REVIEW_MARKER)) return true;
+    const blob = reviews == null ? "" : typeof reviews === "string" ? reviews : JSON.stringify(reviews);
+    // a leftover pending review from a crashed run blocks future ones — publish it
+    if (blob.includes("PENDING")) {
+      const submitted = await this.call("pull_request_review_write", {
+        method: "submit_pending", owner, repo, pullNumber: prNumber, event: "COMMENT", body: full,
+      }, { soft: true });
+      if (submitted != null) return true;
     }
+    // only post a summary review if none of ours exists
+    if (blob.includes(REVIEW_MARKER)) return true;
     const created = await this.call("pull_request_review_write", {
       method: "create", owner, repo, pullNumber: prNumber, event: "COMMENT", body: full,
     }, { soft: true });

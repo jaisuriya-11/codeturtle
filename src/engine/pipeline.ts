@@ -2,7 +2,7 @@
 
 import { buildContext } from "./bundler.js";
 import { limits } from "./config.js";
-import { getForgeClient, getRestForgeClient } from "./forge.js";
+import { describeError, getForgeClient, getRestForgeClient, type ForgeClient } from "./forge.js";
 import { compareDiffs } from "./forgeCommits.js";
 import { applyExcludes, loadNorms } from "./norms.js";
 import { finalize, finalizeCommit, markFailed, snapFindings } from "./poster.js";
@@ -49,9 +49,12 @@ export async function runReview(job: Job, log: Logger = console.log): Promise<vo
     return;
   }
 
-  const gl = await getForgeClient(job.forge);
+  // client construction can fail (token refresh is a network call) — the lock
+  // must still be released, so it happens under the same finally
+  let gl: ForgeClient | null = null;
   let statusId: number | string | null = null;
   try {
+    gl = await getForgeClient(job.forge);
     statusId = await gl.postStatus(projectId, prNumber, "🐢 **Code Turtle** is reviewing this MR…");
     const mr = await gl.getMr(projectId, prNumber);
     const refs = mr.diffRefs;
@@ -78,10 +81,10 @@ export async function runReview(job: Job, log: Logger = console.log): Promise<vo
     log(`pr=${prNumber} found=${result.findings.length} kept=${kept.length}`);
     await finalize(gl, projectId, prNumber, refs, result, kept, statusId, log);
   } catch (e) {
-    log(`review failed pr=${prNumber}: ${e instanceof Error ? e.message : e}`);
-    if (statusId != null) await markFailed(gl, projectId, prNumber, statusId).catch(() => {});
+    log(`review failed pr=${prNumber}: ${describeError(e)}`);
+    if (gl && statusId != null) await markFailed(gl, projectId, prNumber, statusId).catch(() => {});
   } finally {
-    await gl.close();
+    await gl?.close().catch(() => {});
     state.releaseLock(projectId, prNumber);
   }
 }
@@ -101,8 +104,9 @@ export async function runPushReview(job: PushJob, log: Logger = console.log): Pr
     return;
   }
 
-  const gl = await getRestForgeClient(forge);
+  let gl: ForgeClient | null = null;
   try {
+    gl = await getRestForgeClient(forge);
     const diffs = await compareDiffs(forge, projectId, baseSha, headSha);
     if (!diffs.length) {
       log(`branch=${branch} nothing to review`);
@@ -127,9 +131,9 @@ export async function runPushReview(job: PushJob, log: Logger = console.log): Pr
     log(`branch=${branch} found=${result.findings.length} kept=${kept.length}`);
     await finalizeCommit(forge, projectId, branch, headSha, filtered, result, kept, log);
   } catch (e) {
-    log(`review failed branch=${branch}: ${e instanceof Error ? e.message : e}`);
+    log(`review failed branch=${branch}: ${describeError(e)}`);
   } finally {
-    await gl.close();
+    await gl?.close().catch(() => {});
     state.releaseLock(projectId, ref);
   }
 }

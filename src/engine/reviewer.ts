@@ -50,6 +50,32 @@ severity ∈ critical|warning|info ; category ∈ security|bug|perf|style|mainta
 for the flagged line only — raw code, same indentation, no fences, no commentary.
 Omit "suggested_code" unless you are sure it is a drop-in replacement for that one line.`;
 
+/** Extra passes for small models: one lens per pass — checklist verification
+ * recalls far more than one free-form sweep over a multi-file diff. */
+const FOCUS_PROMPTS: Record<string, string> = {
+  security: `THIS PASS REVIEWS SECURITY ONLY — ignore style, perf, naming.
+Walk this checklist over EVERY '+' line in EVERY file, one file at a time:
+- secrets, tokens, passwords, or decrypted payloads written to logs/stdout
+- crypto downgrades: ECB mode, static/hardcoded/empty IV or key, MD5/SHA-1,
+  reduced key sizes, disabled TLS/certificate checks
+- weak randomness where security matters: java.util.Random / Math.random / rand()
+  used for tokens, session ids, keys, or IVs instead of a CSPRNG (SecureRandom etc.)
+- validation weakened or bypassed: size/bounds checks removed or inverted
+  (e.g. a limit check turned into '< 0'), input sanitisation deleted
+- authentication/authorization checks removed, weakened, or bypassed
+- injection: SQL/command/path/HTML built from concatenated input
+Report every hit. If unsure, still report it with lower confidence.`,
+  logic: `THIS PASS REVIEWS LOGIC AND CORRECTNESS ONLY — ignore style, naming.
+Walk EVERY '+' line in EVERY file, one file at a time, hunting for:
+- inverted or neutered conditions (comparisons that are now always true/false)
+- emptied or gutted method bodies — cleanup/eviction/purge/close that no longer
+  does anything (resource and memory leaks)
+- data stored but never removed; timers/listeners never cancelled
+- off-by-one errors, wrong operator, swapped arguments, dropped error handling
+- return values ignored or constants returned where computation is required
+Report every hit. If unsure, still report it with lower confidence.`,
+};
+
 const SEVERITIES = new Set(["critical", "warning", "info"]);
 const CATEGORIES = new Set(["security", "bug", "perf", "style", "maintainability"]);
 
@@ -108,32 +134,64 @@ function evidenceInDiff(f: Finding, diffNorm: string): boolean {
   return ev.length === 0 || diffNorm.includes(ev);
 }
 
-export async function review(
-  diffText: string, context: ContextBundle, norms: Norms,
-  log: (msg: string) => void = () => {},
-): Promise<ReviewResult> {
-  const s = reviewerSettings();
-  if (!s.apiKey && !s.baseUrl.includes("localhost")) {
-    throw new Error("No reviewer API key configured. Run: codeturtle (setup)");
+/** Union findings from multiple passes: same file, same category, within ±3
+ * lines = the same issue seen twice — keep the higher-confidence copy. */
+export function dedupeFindings(findings: Finding[]): Finding[] {
+  const out: Finding[] = [];
+  for (const f of findings) {
+    const dup = out.findIndex(
+      (o) => o.file === f.file && o.category === f.category && Math.abs(o.line - f.line) <= 3,
+    );
+    if (dup === -1) out.push(f);
+    else if (f.confidence > out[dup].confidence) out[dup] = f;
   }
-  const client = new OpenAI({ apiKey: s.apiKey || "local", baseURL: s.baseUrl });
+  return out;
+}
+
+/** Retry transient model errors (rate limits, server hiccups) with backoff.
+ * Honors Retry-After when the provider sends one. */
+async function createWithRetry(
+  client: OpenAI, params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+  log: (msg: string) => void,
+): Promise<OpenAI.Chat.ChatCompletion> {
+  let delay = Number(process.env.REVIEWER_RETRY_BASE_MS ?? 5000);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await client.chat.completions.create(params);
+    } catch (e: any) {
+      const status = e?.status;
+      if (![429, 500, 502, 503].includes(status) || attempt >= 2) throw e;
+      const retryAfter = Number(e?.headers?.["retry-after"]);
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 60_000)
+        : delay;
+      log(`model returned ${status}${status === 429 ? " (rate limited)" : ""} — retrying in ${Math.round(wait / 1000)}s`);
+      await new Promise((r) => setTimeout(r, wait));
+      delay *= 3;
+    }
+  }
+}
+
+async function runPass(
+  client: OpenAI, model: string, system: string, user: string,
+  log: (msg: string) => void,
+): Promise<ReviewResult> {
   const messages = [
-    { role: "system" as const, content: systemPrompt(norms) },
-    {
-      role: "user" as const,
-      content: `## Surrounding codebase context\n${renderContext(context)}\n\n## Diff to review\n${diffText}`,
-    },
+    { role: "system" as const, content: system },
+    { role: "user" as const, content: user },
   ];
-  log(`reviewing model=${s.model} diff=${diffText.length} ctx_files=${context.files.length}`);
 
   let raw: string;
   try {
-    const resp = await client.chat.completions.create({
-      model: s.model, messages, temperature: 0.2, response_format: { type: "json_object" },
-    });
+    const resp = await createWithRetry(client, {
+      model, messages, temperature: 0.2, response_format: { type: "json_object" },
+    }, log);
     raw = resp.choices[0]?.message?.content ?? "{}";
-  } catch {
-    const resp = await client.chat.completions.create({ model: s.model, messages, temperature: 0.2 });
+  } catch (e: any) {
+    // some compat servers reject response_format — only then strip it and retry;
+    // rate limits and server errors above already retried and should surface
+    if (![400, 404, 422].includes(e?.status)) throw e;
+    const resp = await createWithRetry(client, { model, messages, temperature: 0.2 }, log);
     raw = resp.choices[0]?.message?.content ?? "{}";
   }
 
@@ -149,14 +207,44 @@ export async function review(
     return { findings: [], summary: "Reviewer output could not be parsed." };
   }
 
-  const diffNorm = stripWs(diffText);
   const findings = ((data.findings ?? []) as any[])
     .map(parseFinding)
-    .filter((f): f is Finding => f !== null)
-    .filter((f) => {
+    .filter((f): f is Finding => f !== null);
+  return { findings, summary: String(data.summary ?? "") };
+}
+
+export async function review(
+  diffText: string, context: ContextBundle, norms: Norms,
+  log: (msg: string) => void = () => {},
+): Promise<ReviewResult> {
+  const s = reviewerSettings();
+  if (!s.apiKey && !s.baseUrl.includes("localhost")) {
+    throw new Error("No reviewer API key configured. Run: codeturtle (setup)");
+  }
+  const client = new OpenAI({ apiKey: s.apiKey || "local", baseURL: s.baseUrl });
+  const system = systemPrompt(norms);
+  const user = `## Surrounding codebase context\n${renderContext(context)}\n\n## Diff to review\n${diffText}`;
+  const foci = ["security", "logic"].slice(0, s.passes - 1);
+  log(`reviewing model=${s.model} passes=${s.passes} diff=${diffText.length} ctx_files=${context.files.length}`);
+
+  // general pass failure is fatal (existing behaviour); focus passes are best-effort
+  const [general, ...extras] = await Promise.all([
+    runPass(client, s.model, system, user, log),
+    ...foci.map((f) =>
+      runPass(client, s.model, `${system}\n\n${FOCUS_PROMPTS[f]}`, user, log).catch((e) => {
+        log(`${f} pass failed: ${e instanceof Error ? e.message : e}`);
+        return { findings: [], summary: "" } as ReviewResult;
+      }),
+    ),
+  ]);
+
+  const diffNorm = stripWs(diffText);
+  const findings = dedupeFindings(
+    [...general.findings, ...extras.flatMap((r) => r.findings)].filter((f) => {
       const ok = evidenceInDiff(f, diffNorm);
       if (!ok) log(`dropped fabricated finding ${f.file}:${f.line} — evidence not in diff`);
       return ok;
-    });
-  return { findings, summary: String(data.summary ?? "") };
+    }),
+  );
+  return { findings, summary: general.summary };
 }

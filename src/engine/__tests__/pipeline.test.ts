@@ -70,6 +70,20 @@ describe("runReview", () => {
     expect(logs.some((m) => /pr=1 nothing to review/.test(m))).toBe(true);
   });
 
+  it("releases the lock when the forge client can't even be constructed", async () => {
+    const j = job();
+    vi.mocked(getForgeClient).mockRejectedValueOnce(new Error("token refresh failed"));
+    const logs: string[] = [];
+    await runReview(j, (m) => logs.push(m));
+    expect(logs.some((m) => m.includes("review failed") && m.includes("token refresh failed"))).toBe(true);
+    // lock must be free again — a second run reaches the forge stage
+    ph.fake = makeFakeForge({ diffs: [] });
+    const logs2: string[] = [];
+    await runReview(j, (m) => logs2.push(m));
+    expect(logs2.some((m) => m.includes("nothing to review"))).toBe(true);
+    expect(logs2.some((m) => m.includes("already locked"))).toBe(false);
+  });
+
   it("drops findings below the confidence threshold", async () => {
     const fake = makeFakeForge({ diffs: [diff] });
     ph.fake = fake;

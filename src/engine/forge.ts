@@ -16,6 +16,14 @@ export interface Note {
   body: string;
 }
 
+/** Error → log line. undici buries the real reason ("fetch failed") in
+ * error.cause — surface it so network failures are diagnosable. */
+export function describeError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const cause = e.cause instanceof Error ? e.cause.message : e.cause ? String(e.cause) : "";
+  return cause && !e.message.includes(cause) ? `${e.message} (${cause})` : e.message;
+}
+
 export interface ForgeClient {
   close(): Promise<void>;
   getMr(projectId: string, prNumber: number): Promise<MrInfo>;

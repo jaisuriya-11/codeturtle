@@ -61,6 +61,7 @@ export function Dashboard({
   const [events, setEvents] = useState<string[]>([]);
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [model, setModel] = useState(reviewerSettings().model);
+  const [passes, setPasses] = useState(reviewerSettings().passes);
   const [pendingPr, setPendingPr] = useState<number | null>(null);
   const [viewPr, setViewPr] = useState<number | null>(null);
   const [watching, setWatching] = useState(false);
@@ -144,7 +145,9 @@ export function Dashboard({
           void refreshOpen();
         }
       },
-    }).finally(() => setWatching(false));
+    })
+      .catch((e) => addEvent(`watcher stopped: ${e instanceof Error ? e.message : e}`))
+      .finally(() => setWatching(false));
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
@@ -261,8 +264,8 @@ export function Dashboard({
       <Box flexDirection="column">
         <Header />
         <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column">
-          <Text color="red" bold>Reset login & repos?</Text>
-          <Text>Signs out (deletes forge tokens) and clears watched repos. Model config is kept.</Text>
+          <Text color="red" bold>Reset login, repos & model?</Text>
+          <Text>Signs out (deletes forge tokens), clears watched repos and the review model/API key.</Text>
           <Box marginTop={1}>
             <SelectInput
               items={[
@@ -331,12 +334,18 @@ export function Dashboard({
             items={[
               { label: "← Back", value: "back" },
               { label: `Change model  (${model})`, value: "model" },
+              { label: `Review passes  (${passes} — ${passes === 1 ? "fast" : "thorough"})`, value: "passes" },
               { label: `Auto-review repos  (${targets.length} watched)`, value: "repos" },
             ]}
             onSelect={(item) => {
               if (item.value === "back") setOverlay("settings");
               else if (item.value === "model") setOverlay("model");
-              else setOverlay("repos");
+              else if (item.value === "passes") {
+                // 1 → 2 → 3 → 1: extra passes re-scan with security/logic checklists
+                const next = passes >= 3 ? 1 : passes + 1;
+                updateConfig("reviewer", { passes: next });
+                setPasses(next);
+              } else setOverlay("repos");
             }}
           />
         </Box>

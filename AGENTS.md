@@ -73,10 +73,12 @@ Data flow: `cli|tui → pipeline.runReview(job)|runPushReview(job) → forge cli
    write them anywhere else, never echo them in errors or TUI. Env vars override store.
 4. **`~/.codeturtle` file shapes are a compatibility contract** (credentials.json, config.json).
    Additive changes only; never rename/remove existing fields.
-5. **GitHub MCP has no comment-edit tool.** That's why there is no sticky status note on the
-   MCP path and the summary goes out as ONE review via pending-review flow
-   (create → add_comment_to_pending_review → submit_pending). Don't "fix" this by posting
-   per-finding reviews — one review per run.
+5. **GitHub MCP has no comment-edit tool.** Notes, the sticky status comment, and note
+   listing therefore go through a REST companion client (same token) inside
+   `GitHubMcpClient`; the summary still goes out as ONE review via the MCP pending-review
+   flow (create → add_comment_to_pending_review → submit_pending). A leftover PENDING
+   review from a crashed run is reused/submitted, never abandoned. Don't "fix" any of
+   this by posting per-finding reviews — one review per run.
 6. **Reviewer output is hostile input.** Models return wrong enums, word confidences
    ("high"), fenced JSON. `reviewer.ts` validates every finding and drops invalid ones
    silently. Keep validation strict; coerce only what's unambiguous.

@@ -8,7 +8,9 @@ const latestCommit = new Map<string, string>();
 const locks = new Map<string, number>();
 
 const EVENT_TTL_MS = 60 * 60 * 1000;
-const LOCK_TTL_MS = 10 * 60 * 1000;
+// generous: local multi-pass models can run >10 min — an expired lock mid-run
+// lets a second run start and double-post. TTL only guards crashed processes.
+const LOCK_TTL_MS = 30 * 60 * 1000;
 
 // ref: a PR number, or a `branch:<name>` string for push reviews
 const key = (projectId: string, ref: number | string) => `${projectId}#${ref}`;
