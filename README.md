@@ -69,6 +69,16 @@ reference, the TUI components, configuration, and the hard invariants. Start at
 
 Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) for guidelines on how to get started.
 
+**Quick local test** — build and link to test your changes as a global command:
+
+```bash
+npm run build && npm link
+codeturtle status   # now uses your local build
+npm unlink -g code-turtle   # undo when done
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/getting-started.md](docs/getting-started.md#test-locally-with-npm-link) for full details.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

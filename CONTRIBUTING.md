@@ -61,6 +61,32 @@ Code Turtle compiles from TypeScript to a single ESM bundle using `tsup`.
     node dist/cli.js review <PR-link>
     ```
 
+### Testing locally with `npm link`
+
+To test your local changes as if `codeturtle` were globally installed:
+
+```bash
+# 1. Build first
+npm run build
+
+# 2. Link the package globally — this creates a global `codeturtle` symlink
+npm link
+
+# 3. Now `codeturtle` uses your local build
+codeturtle status
+codeturtle review <PR-link>
+
+# 4. When you make more changes, rebuild and the symlink picks them up
+npm run build
+
+# 5. To undo the link and restore the published version
+npm unlink -g code-turtle
+npm install -g code-turtle
+```
+
+> The symlink points at your `dist/` output, so you **must rebuild** after each change.
+> No need to re-link — just `npm run build` and the global `codeturtle` command updates.
+
 ---
 
 ## Coding Standards
