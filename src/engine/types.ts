@@ -7,6 +7,16 @@ export interface Job {
   headSha: string;
 }
 
+/** A push to a branch with no open PR — reviewed via commit comments. */
+export interface PushJob {
+  forge: Forge;
+  projectId: string;
+  branch: string;
+  headSha: string;
+  /** last seen SHA on the branch — the base of the push diff */
+  baseSha: string;
+}
+
 export type Severity = "critical" | "warning" | "info";
 export type Category = "security" | "bug" | "perf" | "style" | "maintainability";
 

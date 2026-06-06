@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { fetchCodeSnippet, fetchPRReview, type ParsedFinding, type PRReviewData } from "../engine/viewer.js";
 import type { Forge } from "../engine/types.js";
 import { ACCENT, DIM, Header } from "./theme.js";
@@ -20,6 +20,19 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
   const [codeSnippet, setCodeSnippet] = useState<{ lines: string[]; startLine: number } | null>(null);
   const [loadingSnippet, setLoadingSnippet] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [fileFilter, setFileFilter] = useState<string | null>(null);
+
+  const files = useMemo(
+    () => [...new Set((data?.findings ?? []).map((f) => f.file))],
+    [data],
+  );
+  const findings = useMemo(
+    () =>
+      fileFilter
+        ? (data?.findings ?? []).filter((f) => f.file === fileFilter)
+        : data?.findings ?? [],
+    [data, fileFilter],
+  );
 
   useEffect(() => {
     let active = true;
@@ -47,11 +60,11 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
   }, [forge, projectId, prNumber]);
 
   useEffect(() => {
-    if (!data || data.findings.length === 0 || showSummary) {
+    if (findings.length === 0 || showSummary) {
       setCodeSnippet(null);
       return;
     }
-    const finding = data.findings[activeIndex];
+    const finding = findings[activeIndex];
     if (!finding) return;
 
     let active = true;
@@ -72,7 +85,7 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     return () => {
       active = false;
     };
-  }, [data, activeIndex, showSummary, forge, projectId, prNumber]);
+  }, [findings, activeIndex, showSummary, forge, projectId, prNumber]);
 
   useInput((input, key) => {
     if (key.escape || input === "q") {
@@ -88,11 +101,19 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       return;
     }
 
-    if (data.findings.length > 0 && !showSummary) {
+    // cycle the file filter: all → file1 → file2 → … → all
+    if (input === "f" && files.length > 1) {
+      const idx = fileFilter ? files.indexOf(fileFilter) : -1;
+      setFileFilter(idx + 1 >= files.length ? null : files[idx + 1]);
+      setActiveIndex(0);
+      return;
+    }
+
+    if (findings.length > 0 && !showSummary) {
       if (input === "j" || key.downArrow) {
-        setActiveIndex((prev) => (prev + 1) % data.findings.length);
+        setActiveIndex((prev) => (prev + 1) % findings.length);
       } else if (input === "k" || key.upArrow) {
-        setActiveIndex((prev) => (prev - 1 + data.findings.length) % data.findings.length);
+        setActiveIndex((prev) => (prev - 1 + findings.length) % findings.length);
       }
     }
   });
@@ -148,7 +169,7 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     );
   }
 
-  const activeFinding = data.findings.length > 0 ? data.findings[activeIndex] : null;
+  const activeFinding = findings.length > 0 ? findings[activeIndex] : null;
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -253,20 +274,23 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       )}
 
       {/* BOTTOM PANE: Scrollable Findings List (Quickfix style) */}
-      {data.findings.length > 0 && (
+      {findings.length > 0 && (
         <Box borderStyle="round" borderColor={DIM} paddingX={1} flexDirection="column">
           <Text bold color={DIM}>
-            Findings List ({activeIndex + 1}/{data.findings.length})
+            Findings List ({activeIndex + 1}/{findings.length})
+            {fileFilter ? (
+              <Text color={ACCENT}> · file: {fileFilter}</Text>
+            ) : null}
           </Text>
           <Box flexDirection="column" marginTop={1}>
             {(() => {
               const maxVisible = 5;
               let start = Math.max(0, activeIndex - Math.floor(maxVisible / 2));
-              let end = Math.min(data.findings.length, start + maxVisible);
+              let end = Math.min(findings.length, start + maxVisible);
               if (end - start < maxVisible) {
                 start = Math.max(0, end - maxVisible);
               }
-              return data.findings.slice(start, end).map((f, idx) => {
+              return findings.slice(start, end).map((f, idx) => {
                 const actualIdx = start + idx;
                 const isActive = actualIdx === activeIndex;
                 const prefix = isActive ? "❯ " : "  ";
@@ -292,6 +316,12 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
             <>
               {"  ·  "}
               <Text color={ACCENT} bold>s</Text> toggle summary
+            </>
+          ) : null}
+          {files.length > 1 ? (
+            <>
+              {"  ·  "}
+              <Text color={ACCENT} bold>f</Text> filter by file
             </>
           ) : null}
           {"  ·  "}

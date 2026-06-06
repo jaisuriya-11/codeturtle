@@ -35,10 +35,17 @@ interface TokenResponse {
   error_description?: string;
 }
 
+// code turtle's published GitHub App client id (public, not a secret).
+export const DEFAULT_GITHUB_CLIENT_ID = "Iv23ctVK4tv3DELTC0JY";
+
 /** The OAuth app/GitHub app client id (public, not a secret). Env wins, then
- * the value stored alongside the github credential. No baked-in default. */
+ * the value stored alongside the github credential, then the baked-in default. */
 export function getGithubClientId(): string | undefined {
-  return process.env.GITHUB_CLIENT_ID ?? loadCredentials().github?.client_id ?? undefined;
+  return (
+    process.env.GITHUB_CLIENT_ID ??
+    loadCredentials().github?.client_id ??
+    DEFAULT_GITHUB_CLIENT_ID
+  );
 }
 
 async function postForm(url: string, params: Record<string, string>): Promise<any> {

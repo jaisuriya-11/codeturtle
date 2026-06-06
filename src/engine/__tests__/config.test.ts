@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  getBotName, loadConfig, loadCredentials, resetAll, resolveToken,
-  reviewerSettings, setForge, updateConfig,
+  getBotName, hasForgeCredentials, loadConfig, loadCredentials, resetAll,
+  resetLogin, resolveToken, reviewerConfigured, reviewerSettings, setForge,
+  updateConfig,
 } from "../config.js";
 
 const HOME = process.env.CODETURTLE_HOME as string;
@@ -89,5 +90,50 @@ describe("app config", () => {
   it("round-trips watch config", () => {
     updateConfig("watch", { targets: ["github:o/r"], interval: 45 });
     expect(loadConfig().watch).toEqual({ targets: ["github:o/r"], interval: 45 });
+  });
+});
+
+describe("reviewerConfigured", () => {
+  it("is false with no key and a cloud base url", () => {
+    expect(reviewerConfigured()).toBe(false);
+  });
+  it("is true with an api key", () => {
+    updateConfig("reviewer", { api_key: "k" });
+    expect(reviewerConfigured()).toBe(true);
+  });
+  it("is true with a local base url and no key", () => {
+    updateConfig("reviewer", { base_url: "http://localhost:11434/v1" });
+    expect(reviewerConfigured()).toBe(true);
+  });
+});
+
+describe("resetLogin", () => {
+  it("drops tokens and watch targets, keeps client id and reviewer config", () => {
+    setForge("github", { token: "t", user: "u", client_id: "cid" });
+    setForge("gitlab", { token: "t2" });
+    updateConfig("reviewer", { model: "m", api_key: "k" });
+    updateConfig("watch", { targets: ["github:o/r"], interval: 45 });
+
+    resetLogin();
+
+    expect(loadCredentials().github).toEqual({ client_id: "cid" });
+    expect(loadCredentials().gitlab).toBeUndefined();
+    expect(loadConfig().reviewer).toMatchObject({ model: "m", api_key: "k" });
+    expect(loadConfig().watch).toEqual({ targets: [], interval: 45 });
+    expect(hasForgeCredentials()).toBe(false);
+  });
+});
+
+describe("hasForgeCredentials", () => {
+  it("is false with no stored or env tokens", () => {
+    expect(hasForgeCredentials()).toBe(false);
+  });
+  it("is true with a stored token", () => {
+    setForge("gitlab", { token: "t" });
+    expect(hasForgeCredentials()).toBe(true);
+  });
+  it("is true with an env token", () => {
+    process.env.GITHUB_TOKEN = "t";
+    expect(hasForgeCredentials()).toBe(true);
   });
 });

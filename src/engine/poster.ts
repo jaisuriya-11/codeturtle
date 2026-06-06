@@ -5,7 +5,8 @@ import { reviewerSettings } from "./config.js";
 import {
   findingMarker, REVIEW_MARKER, STATUS_MARKER, type ForgeClient,
 } from "./forge.js";
-import type { DiffRefs, FileDiff, Finding, ReviewResult, Severity } from "./types.js";
+import { listCommitCommentBodies, postCommitComment } from "./forgeCommits.js";
+import type { DiffRefs, FileDiff, Finding, Forge, ReviewResult, Severity } from "./types.js";
 
 const LABEL: Record<Severity, string> = {
   critical: "code-turtle/critical",
@@ -135,6 +136,64 @@ export async function finalize(
     await gl.addLabels(projectId, prNumber, ["code-turtle/clean"]);
   }
   log(`posted: ${posted} new, ${kept.length - posted} already on PR`);
+}
+
+/** Push-review posting: findings as commit comments on the head commit. Same
+ * marker format and ±3 dedup as the PR path — never change either (invariant 1).
+ * No status note / labels: those are PR concepts. One summary per commit. */
+export async function finalizeCommit(
+  forge: Forge, projectId: string, branch: string, headSha: string,
+  diffs: FileDiff[], result: ReviewResult, kept: Finding[],
+  log: (msg: string) => void = () => {},
+): Promise<void> {
+  const botName = reviewerSettings().botName;
+  const botEmoji = botName.toLowerCase().includes("turtle") ? "🐢" : "🤖";
+  const existing = (await listCommitCommentBodies(forge, projectId, headSha)).join("\n");
+  const existingMarkers = [...existing.matchAll(MARKER_RE)].map(
+    (m) => [m[1], Number(m[2])] as const,
+  );
+  const alreadyPosted = (file: string, line: number) =>
+    existingMarkers.some(([f, l]) => f === file && Math.abs(l - line) <= LINE_TOLERANCE);
+  const patchByFile = new Map(diffs.map((d) => [d.newPath, d.diff]));
+
+  let posted = 0;
+  for (const f of kept) {
+    if (alreadyPosted(f.file, f.line)) continue;
+    posted++;
+    const ok = await postCommitComment(forge, projectId, headSha, commentBody(f, botName), {
+      path: f.file, line: f.line, patch: patchByFile.get(f.file) ?? "",
+    });
+    if (!ok) {
+      await postCommitComment(
+        forge, projectId, headSha,
+        `_(couldn't anchor inline — ${f.file}:${f.line})_\n\n${commentBody(f, botName)}`,
+      );
+    }
+  }
+
+  if (!existing.includes(REVIEW_MARKER)) {
+    let summary: string;
+    if (kept.length) {
+      const counts: Record<Severity, number> = { critical: 0, warning: 0, info: 0 };
+      for (const f of kept) counts[f.severity]++;
+      const rows = [...kept]
+        .sort((a, b) => RANK[b.severity] - RANK[a.severity] || a.file.localeCompare(b.file) || a.line - b.line)
+        .map((f) => `| ${EMOJI[f.severity]} ${f.severity} | \`${f.file}:${f.line}\` | ${f.title} |`)
+        .join("\n");
+      summary =
+        `## ${botEmoji} ${botName} — push to \`${branch}\`\n\n${result.summary}\n\n` +
+        `### Findings\n\n` +
+        `| severity | location | finding |\n|---|---|---|\n${rows}\n\n` +
+        `**${counts.critical} critical · ${counts.warning} warning · ${counts.info} info**`;
+    } else {
+      summary =
+        `## ${botEmoji} ${botName} — push to \`${branch}\`\n\n` +
+        `✅ No issues found above the confidence threshold.`;
+    }
+    await postCommitComment(forge, projectId, headSha, `${REVIEW_MARKER}\n${summary}`);
+  }
+
+  log(`posted: ${posted} new, ${kept.length - posted} already on commit`);
 }
 
 export async function markFailed(

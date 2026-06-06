@@ -1,5 +1,5 @@
-/** First-run wizard: model → connect ONE forge (GitHub OAuth / GitHub token /
- * GitLab token) → connected hub (finish, or optionally connect another). */
+/** Login screen: connect ONE forge (GitHub OAuth / GitHub CLI / GitHub token /
+ * GitLab token). Model setup lives in settings — first review prompts if missing. */
 
 import { execFileSync } from "node:child_process";
 import { Box, Text } from "ink";
@@ -8,31 +8,16 @@ import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import React, { useEffect, useState } from "react";
 
-import {
-  loadCredentials,
-  resolveToken,
-  setForge,
-  updateConfig,
-} from "../engine/config.js";
+import { setForge } from "../engine/config.js";
 import {
   completeDeviceFlow,
   getGithubClientId,
   startDeviceFlow,
   type DeviceFlowStart,
 } from "../engine/githubAuth.js";
-import { ModelPicker, type ModelChoice } from "./ModelPicker.js";
 import { ACCENT, DIM, Header } from "./theme.js";
 
-type Step =
-  | "model"
-  | "connect"
-  | "githubKey"
-  | "githubDevice"
-  | "githubRepo"
-  | "githubRepoManual"
-  | "gitlabKey"
-  | "connected"
-  | "done";
+type Step = "pick" | "githubKey" | "githubDevice" | "gitlabKey";
 
 function ghCliToken(): string | null {
   try {
@@ -75,42 +60,21 @@ async function validateGitlab(
   }
 }
 
-async function fetchGithubRepos(token: string): Promise<string[]> {
-  try {
-    const r = await fetch(
-      "https://api.github.com/user/repos?per_page=50&sort=pushed",
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-        },
-        signal: AbortSignal.timeout(15000),
-      },
-    );
-    if (!r.ok) return [];
-    return ((await r.json()) as any[]).map((x) => x.full_name);
-  } catch {
-    return [];
-  }
-}
-
-export function Setup({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState<Step>("model");
+export function Login({ onDone }: { onDone: () => void }) {
+  const [step, setStep] = useState<Step>("pick");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [gitlabUrl, setGitlabUrl] = useState("https://gitlab.com");
-  const [githubRepos, setGithubRepos] = useState<string[]>([]);
+  const [gitlabUrl] = useState(process.env.GITLAB_URL ?? "https://gitlab.com");
   const [device, setDevice] = useState<DeviceFlowStart | null>(null);
 
-  // OAuth device flow: request a code, poll until the user authorises, then
-  // load repos and continue exactly like the token path.
+  // OAuth device flow: request a code, poll until the user authorises.
   useEffect(() => {
     if (step !== "githubDevice") return;
     const clientId = getGithubClientId();
     if (!clientId) {
       setError("set GITHUB_CLIENT_ID to enable GitHub OAuth");
-      setStep("connect");
+      setStep("pick");
       return;
     }
     const ctrl = new AbortController();
@@ -127,61 +91,30 @@ export function Setup({ onDone }: { onDone: () => void }) {
           ctrl.signal,
         );
         if (ctrl.signal.aborted) return;
-        setBusy("Loading your GitHub repos…");
-        setGithubRepos(await fetchGithubRepos(resolveToken("github") ?? ""));
-        setBusy(null);
         setDevice(null);
         setError(user ? null : "Signed in, but couldn't read your username.");
-        setStep("githubRepo");
+        onDone();
       } catch (e) {
         if (ctrl.signal.aborted) return;
-        setBusy(null);
         setDevice(null);
         setError(e instanceof Error ? e.message : "GitHub sign-in failed");
-        setStep("connect");
+        setStep("pick");
       }
     })();
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const hasAnyForge = () =>
-    !!(resolveToken("github") || resolveToken("gitlab"));
-
-  const connectedSummary = () => {
-    const creds = loadCredentials();
-    const parts = (["github", "gitlab"] as const)
-      .filter((f) => resolveToken(f))
-      .map((f) => (creds[f]?.user ? `${f} (${creds[f].user})` : f));
-    return parts.length ? `✓ connected: ${parts.join("  ·  ")}` : "";
-  };
-
-  const onModel = (c: ModelChoice) => {
-    updateConfig("reviewer", {
-      provider: c.provider,
-      api_key: c.apiKey,
-      base_url: c.baseUrl,
-      model: c.model,
-    });
-    setStep("connect");
-  };
-
   const connectGithubToken = async (token: string) => {
     setBusy("Validating GitHub token…");
     const user = await validateGithub(token);
+    setBusy(null);
     if (!user) {
-      setBusy(null);
       setError("Token rejected by GitHub. Try again.");
       return;
     }
     setForge("github", { token, method: "pat", user, backend: "mcp" });
-    setBusy("Loading your GitHub repos…");
-    const repos = await fetchGithubRepos(token);
-    setGithubRepos(repos);
-    setBusy(null);
-    setError(null);
-    setInput("");
-    setStep("githubRepo");
+    onDone();
   };
 
   if (busy) {
@@ -197,18 +130,12 @@ export function Setup({ onDone }: { onDone: () => void }) {
 
   return (
     <Box flexDirection="column">
-      <Header subtitle="Setup — everything stays on your machine (~/.codeturtle)" />
+      <Header subtitle="Sign in — everything stays on your machine (~/.codeturtle)" />
       {error ? <Text color="red">{error}</Text> : null}
 
-      {step === "model" && <ModelPicker onDone={onModel} />}
-
-      {step === "connect" && (
+      {step === "pick" && (
         <Box flexDirection="column">
-          <Text bold>Connect a forge</Text>
-          <Text color={DIM}>
-            {connectedSummary() ||
-              "Authenticate once — pick one of the options below."}
-          </Text>
+          <Text bold>Sign in to a forge</Text>
           <Box marginTop={1}>
             <SelectInput
               items={[
@@ -222,25 +149,11 @@ export function Setup({ onDone }: { onDone: () => void }) {
                   value: "ghpat",
                 },
                 { label: "Connect GitLab (paste a token)", value: "gitlab" },
-                hasAnyForge()
-                  ? { label: "← Back", value: "back" }
-                  : { label: "Skip — set up later", value: "skip" },
               ]}
               onSelect={(item) => {
-                if (item.value === "skip") {
-                  setStep("done");
-                  setTimeout(onDone, 600);
-                } else if (item.value === "back") {
-                  setStep("connected");
-                } else if (item.value === "oauth") {
-                  if (getGithubClientId()) {
-                    setError(null);
-                    setStep("githubDevice");
-                  } else {
-                    setError(
-                      "GitHub OAuth needs a client id — set GITHUB_CLIENT_ID and retry.",
-                    );
-                  }
+                if (item.value === "oauth") {
+                  setError(null);
+                  setStep("githubDevice");
                 } else if (item.value === "gh") {
                   const token = ghCliToken();
                   if (token) void connectGithubToken(token);
@@ -256,11 +169,6 @@ export function Setup({ onDone }: { onDone: () => void }) {
               }}
             />
           </Box>
-          {!getGithubClientId() ? (
-            <Text color={DIM}>
-              OAuth requires GITHUB_CLIENT_ID (a GitHub OAuth/App client id).
-            </Text>
-          ) : null}
         </Box>
       )}
 
@@ -310,79 +218,6 @@ export function Setup({ onDone }: { onDone: () => void }) {
         </Box>
       )}
 
-      {step === "githubRepo" && (
-        <Box flexDirection="column">
-          <Text bold>Select a GitHub repo to monitor / review</Text>
-          <Box marginTop={1}>
-            <SelectInput
-              limit={12}
-              items={[
-                ...githubRepos
-                  .slice(0, 30)
-                  .map((r) => ({ label: r, value: r })),
-                { label: "✎  type repo manually", value: "__manual__" },
-                { label: "Skip", value: "__skip__" },
-              ]}
-              onSelect={(item) => {
-                if (item.value === "__skip__") {
-                  setStep("connected");
-                } else if (item.value === "__manual__") {
-                  setStep("githubRepoManual");
-                } else {
-                  updateConfig("watch", { targets: [`github:${item.value}`] });
-                  setStep("connected");
-                }
-              }}
-            />
-          </Box>
-        </Box>
-      )}
-
-      {step === "githubRepoManual" && (
-        <Box flexDirection="column">
-          <Text bold>Type GitHub repo (owner/repo)</Text>
-          <Box>
-            <Text color={ACCENT}>{"❯ "}</Text>
-            <TextInput
-              value={input}
-              onChange={setInput}
-              onSubmit={(v) => {
-                const repo = v.trim();
-                if (repo) {
-                  updateConfig("watch", { targets: [`github:${repo}`] });
-                }
-                setInput("");
-                setStep("connected");
-              }}
-            />
-          </Box>
-        </Box>
-      )}
-
-      {step === "connected" && (
-        <Box flexDirection="column">
-          <Text bold>You're connected</Text>
-          <Text color={ACCENT}>{connectedSummary()}</Text>
-          <Box marginTop={1}>
-            <SelectInput
-              items={[
-                { label: "Finish", value: "finish" },
-                { label: "Connect another forge", value: "more" },
-              ]}
-              onSelect={(item) => {
-                if (item.value === "more") {
-                  setError(null);
-                  setStep("connect");
-                } else {
-                  setStep("done");
-                  setTimeout(onDone, 600);
-                }
-              }}
-            />
-          </Box>
-        </Box>
-      )}
-
       {step === "gitlabKey" && (
         <Box flexDirection="column">
           <Text bold>GitLab token</Text>
@@ -413,28 +248,13 @@ export function Setup({ onDone }: { onDone: () => void }) {
                   });
                   setError(null);
                   setInput("");
-                  setStep("connected");
+                  onDone();
                 });
               }}
             />
           </Box>
         </Box>
       )}
-
-      {step === "done" && (
-        <Text color={ACCENT}>✓ Setup complete — paste a PR link to review</Text>
-      )}
     </Box>
   );
-}
-
-export function isConfigured(): boolean {
-  const creds = loadCredentials();
-  const hasForge = !!(
-    creds.github?.token ??
-    creds.gitlab?.token ??
-    process.env.GITHUB_TOKEN ??
-    process.env.GITLAB_TOKEN
-  );
-  return hasForge;
 }

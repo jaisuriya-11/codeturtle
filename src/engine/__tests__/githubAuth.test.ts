@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadCredentials, resetAll, setForge } from "../config.js";
 import {
-  completeDeviceFlow, ensureFreshGithubToken, getGithubClientId, pollForToken, startDeviceFlow,
+  completeDeviceFlow, DEFAULT_GITHUB_CLIENT_ID, ensureFreshGithubToken, getGithubClientId,
+  pollForToken, startDeviceFlow,
 } from "../githubAuth.js";
 import { installFetch } from "./helpers/fetchMock.js";
 
@@ -16,12 +17,14 @@ afterEach(() => {
 });
 
 describe("getGithubClientId", () => {
-  it("prefers the env var, then the stored client_id", () => {
+  it("prefers the env var, then the stored client_id, then the default", () => {
     setForge("github", { client_id: "stored" });
     process.env.GITHUB_CLIENT_ID = "fromenv";
     expect(getGithubClientId()).toBe("fromenv");
     delete process.env.GITHUB_CLIENT_ID;
     expect(getGithubClientId()).toBe("stored");
+    resetAll();
+    expect(getGithubClientId()).toBe(DEFAULT_GITHUB_CLIENT_ID);
   });
 });
 

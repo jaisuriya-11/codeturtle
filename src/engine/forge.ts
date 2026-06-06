@@ -343,3 +343,15 @@ export async function getForgeClient(forge: string): Promise<ForgeClient> {
   if (forge === "gitlab") return new GitLabClient();
   throw new Error(`Unknown or unsupported forge: ${forge} (bitbucket lands in v2.1)`);
 }
+
+/** REST client regardless of GITHUB_BACKEND — push reviews need file reads
+ * alongside the commit APIs (forgeCommits.ts), which MCP doesn't expose. */
+export async function getRestForgeClient(forge: string): Promise<ForgeClient> {
+  if (forge === "github") {
+    const { ensureFreshGithubToken } = await import("./githubAuth.js");
+    await ensureFreshGithubToken();
+    return new GitHubRestClient();
+  }
+  if (forge === "gitlab") return new GitLabClient();
+  throw new Error(`Unknown or unsupported forge: ${forge}`);
+}
