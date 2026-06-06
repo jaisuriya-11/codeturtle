@@ -18,7 +18,8 @@ Set the location with `CODETURTLE_HOME`; defaults to `~/.codeturtle`. Managed by
 | File               | Contents                                                                          |
 | ------------------ | --------------------------------------------------------------------------------- |
 | `credentials.json` | per-forge tokens (`token`, `method`, `user`, `url`, `backend`).                   |
-| `config.json`      | the `reviewer` and `watch` sections.                                              |
+| `config.json`      | the `reviewer`, `watch`, and `norms` sections.                                    |
+| `norms/`           | custom norm **packs** (`*.yml`) and code **transforms** (`*.mjs`) — see [Custom norms](#custom-norms-global--packs--plugins). |
 | `watcher.log`      | log output (path constant; used by the roadmap daemon).                           |
 | `watcher.pid`      | daemon pid (roadmap).                                                             |
 | `locks/`           | per-PR lock files (10-min TTL) — see [`state.ts`](./engine-reference.md#statets). |
@@ -129,6 +130,12 @@ without the env var.
     "targets": ["github:owner/repo", "gitlab:group/proj"],
     "interval": 30, // seconds
   },
+  "norms": {
+    // your personal review baseline, applied to EVERY repo (see "Custom norms" below).
+    // same keys as .codeturtle.yml, plus `use` to activate packs/transforms by name.
+    "use": ["security-strict"],
+    "confidence_threshold": 0.65,
+  },
 }
 ```
 
@@ -162,11 +169,12 @@ contains `localhost`.
 ## Per-repo norms (`.codeturtle.yml`)
 
 Drop a `.codeturtle.yml` at the root of the repo **being reviewed** to tune the reviewer for that
-team. It's read at the MR head commit and merged over the built-in defaults
-([`norms.ts`](./engine-reference.md#normsts)).
+team. It's read at the MR head commit and layered on top of the built-in defaults and your global
+norms ([`norms.ts`](./engine-reference.md#normsts)).
 
 ```yaml
 # .codeturtle.yml — all keys optional; shown with their defaults
+extends: [security-strict] # pull in installed global packs by name (see "Custom norms")
 confidence_threshold: 0.7 # findings below this are dropped before posting
 max_findings: 25 # hard cap per review
 exclude: # globs (supports ** and *) excluded from review
@@ -189,12 +197,75 @@ examples: # concrete things this team cares about
     why: "swallowed errors hide failures"
 ```
 
+## Custom norms (global + packs + plugins)
+
+Norms are resolved in **layers**, lowest → highest precedence — the **project wins** on any
+overlapping scalar:
+
+```
+1. built-in DEFAULTS                       (norms.ts)
+2. global norms        config.json `norms` section        → applied to every repo
+3. global-activated packs   `norms.use: [name]`           → ~/.codeturtle/norms/<name>.yml
+4. repo-activated packs     .codeturtle.yml `extends: [name]`  (installed packs, by name only)
+5. repo inline norms        .codeturtle.yml top-level fields    ← wins
+   then: code transforms    global-activated *.mjs only         (run on the merged result)
+```
+
+How fields combine across layers: `confidence_threshold` / `max_findings` are **last-writer-wins**;
+`categories` shallow-merge; `exclude` and `examples` **accumulate** (union / concat); `guidelines`
+**append** (each layer's text is kept and labelled, so a one-line repo note never wipes your
+baseline).
+
+### Packs — reusable declarative rule sets
+
+A **pack** is a named `.yml` file in `~/.codeturtle/norms/` with the same keys as `.codeturtle.yml`
+(plus an optional `name:`; the filename is the fallback name):
+
+```yaml
+# ~/.codeturtle/norms/security-strict.yml
+name: security-strict
+confidence_threshold: 0.6
+categories: { security: true }
+guidelines: |
+  Flag any secret in code, injection sink, or missing authz check.
+```
+
+Activate it **globally** for every repo via `config.json` → `"norms": { "use": ["security-strict"] }`,
+or let a repo opt in with `extends: [security-strict]` in its `.codeturtle.yml`. A repo `extends`
+resolves **by name only** against packs already installed on your machine — an unknown or path-like
+name is silently ignored, never fetched.
+
+### Transforms — code plugins (power users)
+
+A **transform** is a `.mjs` module in `~/.codeturtle/norms/` that adjusts the merged norms
+programmatically:
+
+```js
+// ~/.codeturtle/norms/scale-by-size.mjs
+export default {
+  name: "scale-by-size",
+  transform(norms, ctx) {
+    if ((ctx.diffLines ?? 0) > 500) norms.maxFindings = 50; // be thorough on big diffs
+    return norms;
+  },
+};
+```
+
+Transforms run **only** when listed in the **global** `norms.use` — a repo can never trigger one.
+`ctx` is `{ forge, projectId, mr, diffLines }` (read-only facts; no client handles).
+
+> ⚠️ **A transform runs code with your privileges.** It lives in the same trusted, `chmod 600`
+> store as your tokens — treat dropping a `.mjs` here like installing a CLI plugin. This is exactly
+> why a repo can't activate one.
+
 ### Security: what repo config CANNOT do
 
-`norms.ts` **strips `agent` and `key_ref`** from the parsed YAML before use. A pull-request author
-(or a fork) must never be able to redirect the reviewer to a different model/endpoint or
-exfiltrate your API key through a committed config file. **Never add a way for repo files to set
-URLs, keys, or commands.** This is a hard security invariant — see
+`norms.ts` **strips `agent` and `key_ref`** from the parsed YAML before use, restricts a repo's
+`extends` to **safe bare names** that map to already-installed packs, and **never lets a repo run a
+transform**. A pull-request author (or a fork) must never be able to redirect the reviewer to a
+different model/endpoint, exfiltrate your API key, escape the norms dir, or execute code through a
+committed config file. **Never add a way for repo files to set URLs, keys, or commands, or to run
+code.** This is a hard security invariant — see
 [Invariant 2](./invariants.md#2-security-repo-config-is-untrusted).
 
 ---

@@ -2,11 +2,11 @@
  * engine code so a future change that violates a principle fails here, loudly.
  * If you change one of these on purpose, update the matching invariant in
  * AGENTS.md and this test together. */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadCredentials, resetAll, resolveToken, setForge } from "../config.js";
+import { loadCredentials, normsDir, resetAll, resolveToken, setForge, updateConfig } from "../config.js";
 import { loadNorms } from "../norms.js";
 import { finalize } from "../poster.js";
 import { acquireLock, isLatest, recordLatest, releaseLock } from "../state.js";
@@ -42,6 +42,7 @@ afterEach(() => {
   for (const k of ["GITHUB_TOKEN", "REVIEWER_API_KEY"]) delete process.env[k];
   mcp.calls.length = 0;
   vi.unstubAllGlobals();
+  rmSync(normsDir(), { recursive: true, force: true });
   resetAll();
 });
 
@@ -77,6 +78,34 @@ describe("Invariant 2 — repo config is untrusted (strip agent/key_ref)", () =>
     expect("agent" in norms).toBe(false);
     expect("key_ref" in norms).toBe(false);
     expect("evil_key" in norms).toBe(false);
+  });
+
+  it("a repo `extends` can reference packs by name only — never path-escape the norms dir", async () => {
+    // a real, installed pack proves extends works; the traversal entry must be ignored.
+    mkdirSync(normsDir(), { recursive: true });
+    writeFileSync(join(normsDir(), "ok.yml"), "name: ok\nmax_findings: 3");
+    const gl = makeFakeForge({
+      files: { ".codeturtle.yml": "extends: ['ok', '../../etc/evil', 'a/b']" },
+    });
+    const norms = await loadNorms(gl, "o/r", mr);
+    expect(norms.maxFindings).toBe(3); // the safe-named pack applied; traversal entries no-op'd
+  });
+
+  it("a repo can NEVER trigger a code transform — only the global config can", async () => {
+    // drop a transform that would mutate norms if it ran, and have the REPO try to use it.
+    mkdirSync(normsDir(), { recursive: true });
+    writeFileSync(
+      join(normsDir(), "evil.mjs"),
+      "export default { name: 'evil', transform: (n) => { n.maxFindings = 9999; return n; } }",
+    );
+    const repoTriggers = makeFakeForge({ files: { ".codeturtle.yml": "extends: [evil]" } });
+    expect((await loadNorms(repoTriggers, "o/r", mr)).maxFindings).not.toBe(9999);
+
+    // sanity: the SAME transform DOES run when the global config activates it — proving the
+    // guard is what blocks the repo path, not a broken/ignored transform.
+    updateConfig("norms", { use: ["evil"] });
+    const glGlobal = makeFakeForge({ files: {} });
+    expect((await loadNorms(glGlobal, "o/r", mr)).maxFindings).toBe(9999);
   });
 });
 

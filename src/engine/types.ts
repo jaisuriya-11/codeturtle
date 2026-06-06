@@ -66,6 +66,35 @@ export interface Norms {
   examples: { bad?: string; why?: string }[];
 }
 
+/** A norms layer as authored — in `config.json`'s `norms` section, a `.codeturtle.yml`,
+ * or a pack file. snake_case, every field optional. Merged onto `Norms` by `mergeNorms`.
+ * `name` identifies a pack; `extends` (repo side) references packs by name. */
+export interface RawNorms {
+  name?: string;
+  extends?: string[];
+  confidence_threshold?: number;
+  max_findings?: number;
+  exclude?: string[];
+  categories?: Record<string, boolean>;
+  guidelines?: string;
+  examples?: { bad?: string; why?: string }[];
+}
+
+/** Read-only facts a code transform may use. No client handles — transforms can't do I/O. */
+export interface NormCtx {
+  forge: Forge;
+  projectId: string;
+  mr: MrInfo;
+  diffLines?: number;
+}
+
+/** A power-user code plugin. `~/.codeturtle/norms/<name>.mjs` default-exports this; it runs
+ * only when activated by the GLOBAL `norms.use` list — never on a repo's say-so. */
+export interface NormPlugin {
+  name: string;
+  transform: (norms: Norms, ctx: NormCtx) => Norms | void;
+}
+
 export interface DiffRefs {
   head_sha: string;
   base_sha: string;
