@@ -1,6 +1,12 @@
-# 🐢 Code Turtle
+<p align="center">
+  <img src="assets/logo.png" alt="Code Turtle Logo" width="150" />
+</p>
 
-Local AI code reviewer for GitHub & GitLab. Any model — cloud or local. No server, no webhooks, no cloud.
+<h1 align="center">Code Turtle</h1>
+
+<p align="center">
+  Local AI code reviewer for GitHub & GitLab. Any model — cloud or local. No server, no webhooks, no cloud.
+</p>
 
 ## Install
 
