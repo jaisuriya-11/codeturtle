@@ -86,6 +86,11 @@ export function Dashboard({
       if (found) setStatus(Number(found[1]), { status: "done", detail: `${found[2]} findings` });
       const failed = msg.match(/review failed pr=(\d+)/);
       if (failed) setStatus(Number(failed[1]), { status: "failed", detail: msg.slice(0, 60) });
+      // early pipeline exits — without these the row sticks on "reviewing…"
+      const skipped = msg.match(
+        /pr=(\d+) (nothing to review|all changed files excluded|superseded|already locked)/,
+      );
+      if (skipped) setStatus(Number(skipped[1]), { status: "done", detail: skipped[2] });
     },
     [addEvent, setStatus],
   );

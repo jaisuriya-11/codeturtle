@@ -47,12 +47,14 @@ export async function runReview(job: Job, log: Logger = console.log): Promise<vo
     const headRef = refs.head_sha || headSha;
     const diffs = await gl.getDiffs(projectId, prNumber);
     if (!diffs.length) {
+      log(`pr=${prNumber} nothing to review`);
       await gl.editNote(projectId, prNumber, statusId, "<!-- ct:status -->\n🐢 Nothing to review.");
       return;
     }
     const norms = await loadNorms(gl, projectId, mr);
     const filtered = applyExcludes(diffs, norms);
     if (!filtered.length) {
+      log(`pr=${prNumber} all changed files excluded`);
       await gl.editNote(projectId, prNumber, statusId,
         "<!-- ct:status -->\n🐢 All changed files are excluded by norms.");
       return;

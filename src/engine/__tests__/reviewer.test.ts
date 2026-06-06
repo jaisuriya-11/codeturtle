@@ -50,6 +50,33 @@ describe("review (hostile reviewer output)", () => {
     expect(cFile?.confidence).toBeCloseTo(0.9);
   });
 
+  it("drops a finding whose evidence is not in the diff (hallucination gate)", async () => {
+    const base = { line: 5, severity: "critical", category: "bug", confidence: 0.9, title: "t", comment: "c" };
+    h.content = JSON.stringify({
+      findings: [
+        { ...base, file: "real.ts", evidence: "if (x.isAfter(now))" },
+        { ...base, file: "fake.ts", evidence: "if (x.isBefore(now))" }, // model invented this line
+        { ...base, file: "noev.ts" }, // no evidence → kept (weak models omit it)
+      ],
+      summary: "ok",
+    });
+    const diff = "@@ -1,1 +1,1 @@\n+        if (x.isAfter(now)) {\n";
+    const r = await review(diff, ctx, norms);
+    expect(r.findings.map((f) => f.file)).toEqual(["real.ts", "noev.ts"]);
+  });
+
+  it("matches evidence whitespace-insensitively", async () => {
+    h.content = JSON.stringify({
+      findings: [{
+        file: "a.ts", line: 1, severity: "info", category: "style", confidence: 0.8,
+        title: "t", comment: "c", evidence: "const  x=1;",
+      }],
+      summary: "ok",
+    });
+    const r = await review("@@ -0,0 +1,1 @@\n+const x = 1;\n", ctx, norms);
+    expect(r.findings).toHaveLength(1);
+  });
+
   it("parses JSON wrapped in markdown fences", async () => {
     h.content = "```json\n" + JSON.stringify({ findings: [], summary: "fenced" }) + "\n```";
     const r = await review("diff", ctx, norms);

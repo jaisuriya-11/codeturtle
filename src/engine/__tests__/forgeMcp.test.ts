@@ -49,6 +49,16 @@ describe("GitHubMcpClient", () => {
     expect(d[0]).toMatchObject({ newPath: "a.ts", newFile: true });
   });
 
+  it("getDiffs accepts a legit empty files list", async () => {
+    mh.handler = () => ({ text: JSON.stringify({ files: [] }), content: null, isError: false });
+    expect(await new GitHubMcpClient().getDiffs("o/r", 1)).toEqual([]);
+  });
+
+  it("getDiffs throws on an unexpected response shape instead of reading it as empty", async () => {
+    mh.handler = () => ({ text: "rate limit exceeded", content: null, isError: false });
+    await expect(new GitHubMcpClient().getDiffs("o/r", 1)).rejects.toThrow("unexpected shape");
+  });
+
   it("getFile reads the embedded resource text", async () => {
     mh.handler = () => ({ text: "", content: [{ resource: { text: "file body" } }], isError: false });
     expect(await new GitHubMcpClient().getFile("o/r", "a.ts", "sha")).toBe("file body");
