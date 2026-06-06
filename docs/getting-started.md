@@ -42,6 +42,30 @@ node dist/cli.js status
 > `test:watch`, `test:cov`. See the [Testing](#testing) section below and
 > [Contributing](../CONTRIBUTING.md#tests) for the layout and conventions.
 
+### Test locally with `npm link`
+
+To use your local build as a global `codeturtle` command (instead of `node dist/cli.js ...`):
+
+```bash
+npm run build        # compile first
+npm link             # symlink globally — creates the `codeturtle` command
+
+# now use it like the published package
+codeturtle status
+codeturtle review <PR-link>
+
+# after more edits, just rebuild — no need to re-link
+npm run build
+
+# clean up when done
+npm unlink -g code-turtle
+npm install -g code-turtle   # restore the published version
+```
+
+The symlink points at `dist/`, so every `npm run build` immediately reflects in the global
+command. This is the easiest way to test end-to-end (TUI, reviews, watcher) against a real
+repo without publishing.
+
 ## Testing
 
 Specs are **co-located** with the code in `src/**/__tests__/*.test.ts` and run with
