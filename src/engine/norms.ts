@@ -1,11 +1,15 @@
-/** Review norms: built-in defaults <- repo .codeturtle.yml (last wins).
- * `agent`/`key_ref` are stripped from repo config — a fork must not be able to
- * redirect the reviewer or leak keys. */
+/** Review norms, layered low->high: built-in defaults <- global config & packs <-
+ * repo .codeturtle.yml (project wins). Global code transforms run last. `agent`/`key_ref`
+ * are stripped from repo config and a repo's `extends` may reference packs by NAME only —
+ * a fork must never redirect the reviewer, leak keys, escape the dir, or run code. */
 
 import { parse } from "yaml";
 
+import { loadConfig } from "./config.js";
 import type { ForgeClient } from "./forge.js";
-import type { FileDiff, MrInfo, Norms } from "./types.js";
+import { closeShape, loadPacks, loadTransforms, mergeNorms, safePackName } from "./normsRegistry.js";
+import type { Forge, MrInfo, NormCtx, Norms, RawNorms } from "./types.js";
+import type { FileDiff } from "./types.js";
 
 const DEFAULTS: Norms = {
   confidenceThreshold: 0.7,
@@ -21,29 +25,71 @@ Be concrete and kind. Prefer one strong finding over many weak ones.`,
   examples: [],
 };
 
-export async function loadNorms(gl: ForgeClient, projectId: string, mr: MrInfo): Promise<Norms> {
-  let repoCfg: Record<string, unknown> = {};
+/** Facts the layered loader can pass through to code transforms. */
+export interface LoadNormsCtx {
+  forge?: Forge;
+  diffLines?: number;
+}
+
+export async function loadNorms(
+  gl: ForgeClient,
+  projectId: string,
+  mr: MrInfo,
+  ctx: LoadNormsCtx = {},
+): Promise<Norms> {
+  const packs = loadPacks();
+  const global = loadConfig().norms ?? {};
+
+  // repo .codeturtle.yml — UNTRUSTED. strip redirect/key fields; `extends` is name-only.
+  let repoCfg: RawNorms = {};
   const ref = mr.diffRefs?.head_sha || mr.sourceBranch;
   if (ref) {
     const raw = await gl.getFile(projectId, ".codeturtle.yml", ref).catch(() => null);
     if (raw) {
       try {
-        repoCfg = (parse(raw) as Record<string, unknown>) ?? {};
-        delete repoCfg.agent; // security: never from repo
-        delete repoCfg.key_ref;
+        const parsed = (parse(raw) as Record<string, unknown>) ?? {};
+        delete parsed.agent; // security: never from repo
+        delete parsed.key_ref;
+        repoCfg = parsed as RawNorms;
       } catch {
         repoCfg = {};
       }
     }
   }
-  return {
-    confidenceThreshold: Number(repoCfg.confidence_threshold ?? DEFAULTS.confidenceThreshold),
-    maxFindings: Number(repoCfg.max_findings ?? DEFAULTS.maxFindings),
-    exclude: (repoCfg.exclude as string[]) ?? DEFAULTS.exclude,
-    categories: { ...DEFAULTS.categories, ...((repoCfg.categories as Record<string, boolean>) ?? {}) },
-    guidelines: String(repoCfg.guidelines ?? DEFAULTS.guidelines),
-    examples: (repoCfg.examples as Norms["examples"]) ?? [],
-  };
+
+  // assemble layers, low -> high precedence (project wins on overlapping scalars).
+  const layers: { label: string; raw: RawNorms }[] = [{ label: "global", raw: global }];
+  for (const name of global.use ?? []) {
+    const pack = packs.get(name);
+    if (pack) layers.push({ label: name, raw: pack });
+  }
+  // a repo may pull in packs by NAME only, and only ones already installed locally.
+  for (const name of repoCfg.extends ?? []) {
+    if (!safePackName(name)) continue; // reject path traversal / non-bare names
+    const pack = packs.get(name);
+    if (pack) layers.push({ label: name, raw: pack });
+  }
+  layers.push({ label: "repo", raw: repoCfg });
+
+  let norms = closeShape(DEFAULTS);
+  for (const { label, raw } of layers) norms = mergeNorms(norms, raw, label);
+
+  // code transforms run LAST and only when the GLOBAL config activates them — a repo can
+  // never trigger code. A broken transform must not kill the review.
+  const transforms = await loadTransforms(global.use ?? []);
+  if (transforms.length) {
+    const tctx: NormCtx = { forge: ctx.forge ?? "github", projectId, mr, diffLines: ctx.diffLines };
+    for (const t of transforms) {
+      try {
+        const out = t.transform(norms, tctx);
+        norms = closeShape(out ?? norms);
+      } catch {
+        // skip a throwing transform
+      }
+    }
+  }
+
+  return closeShape(norms);
 }
 
 function globToRegex(pat: string): RegExp {
