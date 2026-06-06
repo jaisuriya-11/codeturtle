@@ -76,7 +76,12 @@ export class GitHubMcpClient implements ForgeClient {
     const d = await this.call("pull_request_read", {
       method: "get_files", owner, repo, pullNumber: prNumber, perPage: 100,
     });
-    const files: any[] = Array.isArray(d) ? d : d?.files ?? [];
+    // strict shape check: a malformed/unparsed response must fail the run, not
+    // silently read as "empty diff" (which posts a wrong "Nothing to review")
+    const files: any[] | undefined = Array.isArray(d) ? d : d?.files;
+    if (!Array.isArray(files)) {
+      throw new Error(`MCP get_files returned an unexpected shape: ${String(d).slice(0, 120)}`);
+    }
     return files.map((f) => ({
       newPath: f.filename ?? "", oldPath: f.previous_filename ?? f.filename ?? "",
       diff: f.patch ?? "", newFile: f.status === "added", deletedFile: f.status === "removed",

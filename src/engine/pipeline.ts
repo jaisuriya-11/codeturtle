@@ -27,6 +27,17 @@ function formatDiff(diffs: FileDiff[], maxChars: number): string {
   return parts.join("\n");
 }
 
+/** Count added lines across a diff set — a cheap signal for norm code transforms. */
+function countAddedLines(diffs: FileDiff[]): number {
+  let n = 0;
+  for (const d of diffs) {
+    for (const line of d.diff.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) n++;
+    }
+  }
+  return n;
+}
+
 export async function runReview(job: Job, log: Logger = console.log): Promise<void> {
   const { projectId, prNumber, headSha } = job;
   if (!state.isLatest(projectId, prNumber, headSha)) {
@@ -47,12 +58,14 @@ export async function runReview(job: Job, log: Logger = console.log): Promise<vo
     const headRef = refs.head_sha || headSha;
     const diffs = await gl.getDiffs(projectId, prNumber);
     if (!diffs.length) {
+      log(`pr=${prNumber} nothing to review`);
       await gl.editNote(projectId, prNumber, statusId, "<!-- ct:status -->\n🐢 Nothing to review.");
       return;
     }
-    const norms = await loadNorms(gl, projectId, mr);
+    const norms = await loadNorms(gl, projectId, mr, { forge: job.forge, diffLines: countAddedLines(diffs) });
     const filtered = applyExcludes(diffs, norms);
     if (!filtered.length) {
+      log(`pr=${prNumber} all changed files excluded`);
       await gl.editNote(projectId, prNumber, statusId,
         "<!-- ct:status -->\n🐢 All changed files are excluded by norms.");
       return;
@@ -100,7 +113,7 @@ export async function runPushReview(job: PushJob, log: Logger = console.log): Pr
       sourceBranch: branch, targetBranch: "", headSha,
       diffRefs: { head_sha: headSha, base_sha: baseSha, start_sha: baseSha },
     };
-    const norms = await loadNorms(gl, projectId, mrLike);
+    const norms = await loadNorms(gl, projectId, mrLike, { forge, diffLines: countAddedLines(diffs) });
     const filtered = applyExcludes(diffs, norms);
     if (!filtered.length) {
       log(`branch=${branch} all changed files excluded by norms`);

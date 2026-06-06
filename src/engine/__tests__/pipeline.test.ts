@@ -63,8 +63,11 @@ describe("runReview", () => {
 
   it("reports nothing to review when there are no diffs", async () => {
     ph.fake = makeFakeForge({ diffs: [] });
-    await runReview(job());
+    const logs: string[] = [];
+    await runReview(job(), (m) => logs.push(m));
     expect(review).not.toHaveBeenCalled();
+    // terminal log line — the TUI uses it to clear the "reviewing…" status
+    expect(logs.some((m) => /pr=1 nothing to review/.test(m))).toBe(true);
   });
 
   it("drops findings below the confidence threshold", async () => {

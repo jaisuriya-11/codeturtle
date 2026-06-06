@@ -6,11 +6,19 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { RawNorms } from "./types.js";
+
 export const HOME = process.env.CODETURTLE_HOME ?? join(homedir(), ".codeturtle");
 const CRED_PATH = join(HOME, "credentials.json");
 const CONFIG_PATH = join(HOME, "config.json");
 export const LOG_FILE = join(HOME, "watcher.log");
 export const PID_FILE = join(HOME, "watcher.pid");
+
+/** Where global norm packs (*.yml) and code transforms (*.mjs) live. Same trust
+ * boundary as the rest of the store — dropping a file here is like installing a plugin. */
+export function normsDir(): string {
+  return join(HOME, "norms");
+}
 
 export interface ForgeCred {
   token?: string;
@@ -36,9 +44,17 @@ export interface WatchConfig {
   interval?: number;
 }
 
+/** Global (user-level) review norms. A personal baseline applied to every repo, plus
+ * `use`: names of packs/transforms in `~/.codeturtle/norms/` to activate globally.
+ * Layers below the repo's own `.codeturtle.yml` (project overrides global). */
+export interface NormsConfig extends RawNorms {
+  use?: string[];
+}
+
 export interface AppConfig {
   reviewer?: ReviewerConfig;
   watch?: WatchConfig;
+  norms?: NormsConfig;
 }
 
 function readJson<T>(path: string): T {
