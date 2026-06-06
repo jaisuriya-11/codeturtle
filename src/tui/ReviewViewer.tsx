@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCodeSnippet, fetchPRReview, type ParsedFinding, type PRReviewData } from "../engine/viewer.js";
 import type { Forge } from "../engine/types.js";
 import { ACCENT, DIM, Header } from "./theme.js";
@@ -34,15 +34,25 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     [data, fileFilter],
   );
 
+  const [refreshTick, setRefreshTick] = useState(0);
+  const hasData = useRef(false);
+
   useEffect(() => {
     let active = true;
     async function load() {
-      setLoading(true);
+      // background refreshes keep the current view — spinner only before first data
+      if (!hasData.current) setLoading(true);
       setError(null);
       try {
         const res = await fetchPRReview(forge, projectId, prNumber);
         if (!active) return;
+        hasData.current = true;
         setData(res);
+        // the review may have changed under us — drop a stale filter, clamp the cursor
+        setFileFilter((prev) =>
+          prev && !res.findings.some((f) => f.file === prev) ? null : prev,
+        );
+        setActiveIndex((i) => Math.min(i, Math.max(0, res.findings.length - 1)));
         if (res.findings.length === 0) {
           setShowSummary(true);
         }
@@ -57,7 +67,13 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     return () => {
       active = false;
     };
-  }, [forge, projectId, prNumber]);
+  }, [forge, projectId, prNumber, refreshTick]);
+
+  // new pushes re-review while this screen is open — poll for fresh comments
+  useEffect(() => {
+    const t = setInterval(() => setRefreshTick((x) => x + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (findings.length === 0 || showSummary) {
@@ -90,6 +106,10 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
   useInput((input, key) => {
     if (key.escape || input === "q") {
       onBack();
+      return;
+    }
+    if (input === "r") {
+      setRefreshTick((x) => x + 1);
       return;
     }
     if (!data) return;
@@ -146,7 +166,8 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
         </Box>
         <Box marginTop={2} borderStyle="round" borderColor={DIM} paddingX={1}>
           <Text color={DIM}>
-            Press <Text color={ACCENT} bold>q/esc</Text> to go back
+            Press <Text color={ACCENT} bold>r</Text> to retry ·{" "}
+            <Text color={ACCENT} bold>q/esc</Text> to go back
           </Text>
         </Box>
       </Box>
@@ -162,7 +183,8 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
         </Box>
         <Box marginTop={2} borderStyle="round" borderColor={DIM} paddingX={1}>
           <Text color={DIM}>
-            Press <Text color={ACCENT} bold>q/esc</Text> to go back
+            Press <Text color={ACCENT} bold>r</Text> to refresh ·{" "}
+            <Text color={ACCENT} bold>q/esc</Text> to go back
           </Text>
         </Box>
       </Box>
@@ -324,6 +346,8 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
               <Text color={ACCENT} bold>f</Text> filter by file
             </>
           ) : null}
+          {"  ·  "}
+          <Text color={ACCENT} bold>r</Text> refresh
           {"  ·  "}
           <Text color={ACCENT} bold>q/esc</Text> go back
         </Text>

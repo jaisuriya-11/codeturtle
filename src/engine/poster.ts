@@ -3,7 +3,7 @@
 
 import { reviewerSettings } from "./config.js";
 import {
-  findingMarker, REVIEW_MARKER, STATUS_MARKER, type ForgeClient,
+  findingMarker, recheckMarker, REVIEW_MARKER, STATUS_MARKER, type ForgeClient,
 } from "./forge.js";
 import { listCommitCommentBodies, postCommitComment } from "./forgeCommits.js";
 import type { DiffRefs, FileDiff, Finding, Forge, ReviewResult, Severity } from "./types.js";
@@ -135,6 +135,20 @@ export async function finalize(
   } else if (!kept.length) {
     await gl.addLabels(projectId, prNumber, ["code-turtle/clean"]);
   }
+
+  // A re-review that produced nothing new is otherwise silent (MCP can't edit;
+  // REST edits the old review in place) — say so in the conversation, once per
+  // head commit. "Re-review" = earlier finding markers exist on the PR.
+  const isReReview = existingMarkers.length > 0;
+  if (isReReview && posted === 0 && refs.head_sha && !existing.includes(recheckMarker(refs.head_sha))) {
+    const short = refs.head_sha.slice(0, 8);
+    const msg = kept.length
+      ? `${botEmoji} ${botName} re-checked \`${short}\` — no new issues; ${kept.length} earlier finding(s) still apply.`
+      : `${botEmoji} ${botName} re-checked \`${short}\` — ✅ no issues found.`;
+    await gl.createNote(projectId, prNumber, `${recheckMarker(refs.head_sha)}\n${msg}`);
+    log(`recheck note posted for ${short}`);
+  }
+
   log(`posted: ${posted} new, ${kept.length - posted} already on PR`);
 }
 

@@ -57,7 +57,8 @@ Data flow: `cli|tui → pipeline.runReview(job)|runPushReview(job) → forge cli
 
 1. **Markers are the idempotency system.** Every bot artifact carries a hidden HTML marker:
    `<!-- ct:f:FILE:LINE -->` (inline finding), `<!-- ct:review -->` (summary review),
-   `<!-- ct:status -->` (status note). Poster dedups findings against existing markers with
+   `<!-- ct:status -->` (status note), `<!-- ct:recheck:SHA -->` (clean re-review note,
+   once per head commit). Poster dedups findings against existing markers with
    **±3 line tolerance** (LLM line jitter). Never post without a marker; never remove the
    tolerance; never change marker formats (breaks dedup against already-posted comments).
    Push reviews reuse the same markers on commit comments, deduped per head commit.

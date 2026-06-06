@@ -16,15 +16,34 @@ imports, callers, and tests), and (b) the diff itself. Use the context to judge
 whether each change is actually correct — e.g. if a function's return shape
 changed, check the callers shown.
 
+How to read the diff — this matters:
+- Lines prefixed '-' are OLD code being REMOVED by this change. They no longer exist.
+- Lines prefixed '+' are NEW code being ADDED. Only this code ships.
+- Before judging a '+' line, compare it with the '-' lines it replaces. If the old
+  code was buggy and the new code is correct, the change is a FIX — do not flag it.
+  Flag only problems that exist in the NEW code.
+- Never report an issue that lives only on a '-' line or only in unchanged context.
+
 Hard rules:
 - Only comment on lines ADDED in the diff (prefixed '+').
 - Use the new-file line number from the hunk header (@@ -a,b +c,d @@).
+- In "evidence", copy the flagged '+' line VERBATIM from the diff (without the '+').
+  A finding whose evidence does not appear in the diff is discarded as fabricated —
+  never paraphrase or reconstruct code from memory.
 - Set confidence honestly (0.0-1.0); low-confidence guesses are dropped.
 - One finding per issue. Be concrete, short, and kind.
 - If the diff is clean, return an empty findings list.
 
+Security checklist — scan every '+' line for these; when present, report with
+category "security", severity "critical", confidence ≥ 0.9:
+- secrets, tokens, passwords, keys, or decrypted payloads written to logs/stdout
+- weakened cryptography: ECB mode, static/hardcoded/empty IV or key, MD5/SHA-1
+  for passwords, disabled TLS/certificate verification, reduced key sizes
+- injection: SQL/command/path/HTML built by concatenating unvalidated input
+- authentication or authorization checks removed, weakened, or bypassed
+
 Respond with ONLY a JSON object — no prose, no markdown fences:
-{"findings": [{"file","line","severity","category","confidence","title","comment","suggestion","suggested_code"}],
+{"findings": [{"file","line","evidence","severity","category","confidence","title","comment","suggestion","suggested_code"}],
  "summary": "one-line overview"}
 severity ∈ critical|warning|info ; category ∈ security|bug|perf|style|maintainability
 "suggestion" is a short prose recommendation. "suggested_code" is the EXACT replacement
@@ -74,7 +93,19 @@ function parseFinding(f: any): Finding | null {
     comment: String(f.comment ?? ""),
     suggestion: f.suggestion ? String(f.suggestion) : undefined,
     suggestedCode: f.suggested_code ? String(f.suggested_code) : undefined,
+    evidence: f.evidence ? String(f.evidence) : undefined,
   };
+}
+
+const stripWs = (s: string) => s.replace(/\s+/g, "");
+
+/** Anti-hallucination gate: a finding that quotes code is kept only if that
+ * code actually appears in the diff (whitespace-insensitive). Findings without
+ * evidence pass — older/weaker models may omit the field. */
+function evidenceInDiff(f: Finding, diffNorm: string): boolean {
+  if (!f.evidence) return true;
+  const ev = stripWs(f.evidence);
+  return ev.length === 0 || diffNorm.includes(ev);
 }
 
 export async function review(
@@ -118,8 +149,14 @@ export async function review(
     return { findings: [], summary: "Reviewer output could not be parsed." };
   }
 
+  const diffNorm = stripWs(diffText);
   const findings = ((data.findings ?? []) as any[])
     .map(parseFinding)
-    .filter((f): f is Finding => f !== null);
+    .filter((f): f is Finding => f !== null)
+    .filter((f) => {
+      const ok = evidenceInDiff(f, diffNorm);
+      if (!ok) log(`dropped fabricated finding ${f.file}:${f.line} — evidence not in diff`);
+      return ok;
+    });
   return { findings, summary: String(data.summary ?? "") };
 }

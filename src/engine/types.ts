@@ -31,6 +31,8 @@ export interface Finding {
   suggestion?: string;
   /** exact replacement for the flagged line — rendered as a committable ```suggestion block */
   suggestedCode?: string;
+  /** verbatim copy of the flagged '+' line — anti-hallucination check in reviewer.ts */
+  evidence?: string;
 }
 
 export interface ReviewResult {

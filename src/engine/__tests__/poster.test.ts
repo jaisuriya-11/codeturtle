@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { finalizeCommit, snapFindings } from "../poster.js";
-import type { FileDiff, Finding, ReviewResult } from "../types.js";
+import { finalize, finalizeCommit, snapFindings } from "../poster.js";
+import type { DiffRefs, FileDiff, Finding, ReviewResult } from "../types.js";
+import { makeFakeForge } from "./helpers/fakeForge.js";
 import { installFetch } from "./helpers/fetchMock.js";
 
 // hunk +1,4: line1 ctx, line2 added, line3 ctx, line4 added
@@ -51,6 +52,45 @@ describe("snapFindings", () => {
     const [out] = snapFindings(diffs, [{ ...f, file: "other.ts" }]);
     expect(out.line).toBe(2);
     expect(out.suggestedCode).toBe("fixed();");
+  });
+});
+
+describe("finalize — recheck note", () => {
+  const refs: DiffRefs = { head_sha: "sha2", base_sha: "b", start_sha: "b" };
+  const clean: ReviewResult = { findings: [], summary: "all good" };
+  const oldMarkerNote = { id: 1, body: "<!-- ct:f:a.ts:2 -->\nold finding" };
+
+  it("posts 'no issues found' on a clean re-review", async () => {
+    const gl = makeFakeForge({ notes: [oldMarkerNote] });
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, clean, [], statusId);
+    const note = gl.created.find((b) => b.includes("<!-- ct:recheck:sha2 -->"));
+    expect(note).toContain("no issues found");
+  });
+
+  it("says earlier findings still apply when everything deduped", async () => {
+    const gl = makeFakeForge({ notes: [oldMarkerNote] });
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    // kept finding sits on the already-posted marker → posted=0
+    await finalize(gl, "o/r", 1, refs, clean, [finding(2)], statusId);
+    const note = gl.created.find((b) => b.includes("<!-- ct:recheck:sha2 -->"));
+    expect(note).toContain("1 earlier finding(s) still apply");
+  });
+
+  it("posts the recheck note only once per head commit", async () => {
+    const gl = makeFakeForge({
+      notes: [oldMarkerNote, { id: 2, body: "<!-- ct:recheck:sha2 -->\nalready said" }],
+    });
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, clean, [], statusId);
+    expect(gl.created.filter((b) => b.includes("ct:recheck"))).toHaveLength(0);
+  });
+
+  it("stays quiet on a first review — the summary already covers it", async () => {
+    const gl = makeFakeForge();
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, clean, [], statusId);
+    expect(gl.created.filter((b) => b.includes("ct:recheck"))).toHaveLength(0);
   });
 });
 

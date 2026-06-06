@@ -8,6 +8,8 @@ export const STATUS_MARKER = "<!-- ct:status -->";
 export const REVIEW_MARKER = "<!-- ct:review -->";
 
 export const findingMarker = (file: string, line: number) => `<!-- ct:f:${file}:${line} -->`;
+// posted once per re-reviewed head commit that produced nothing new
+export const recheckMarker = (sha: string) => `<!-- ct:recheck:${sha} -->`;
 
 export interface Note {
   id: number | string | null;
