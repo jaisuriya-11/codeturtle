@@ -76,6 +76,11 @@ export function resolveToken(forge: string): string | undefined {
   return loadCredentials()[forge]?.token ?? process.env[ENV_TOKEN[forge] ?? ""];
 }
 
+/** True when any forge token exists (file or env) — the TUI login gate. */
+export function hasForgeCredentials(): boolean {
+  return !!(resolveToken("github") ?? resolveToken("gitlab"));
+}
+
 export function loadConfig(): AppConfig {
   return readJson(CONFIG_PATH);
 }
@@ -119,6 +124,25 @@ export function reviewerSettings(): ReviewerSettings {
     model,
     botName,
   };
+}
+
+/** True when a reviewer model is usable: an api key, or a local base url. */
+export function reviewerConfigured(): boolean {
+  const s = reviewerSettings();
+  return !!s.apiKey || s.baseUrl.includes("localhost");
+}
+
+/** Sign out: drop forge credentials and watched repos. Keeps the github OAuth
+ * client id (public, reused on next sign-in) and the reviewer/model config. */
+export function resetLogin(): void {
+  const clientId = loadCredentials().github?.client_id;
+  rmSync(CRED_PATH, { force: true });
+  if (clientId) writeJson(CRED_PATH, { github: { client_id: clientId } });
+  const cfg = loadConfig();
+  if (cfg.watch?.targets?.length) {
+    cfg.watch = { ...cfg.watch, targets: [] };
+    writeJson(CONFIG_PATH, cfg);
+  }
 }
 
 /** Wipe all local config: credentials, settings, logs, pid, locks. */

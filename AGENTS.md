@@ -31,24 +31,27 @@ src/
 │   ├── prLink.ts         pasted URL → {forge, projectId, prNumber}
 │   ├── forge.ts          ForgeClient interface + GitLab REST + GitHub REST fallback + markers
 │   ├── forgeMcp.ts       GitHub via MCP. Pending-review flow. Default GitHub backend.
+│   ├── forgeCommits.ts   commit-level REST ops: branches, push diffs, commit comments
 │   ├── norms.ts          defaults <- repo .codeturtle.yml merge, exclude globs
 │   ├── repoFiles.ts      pure heuristics: imports, exported symbols, test paths
 │   ├── bundler.ts        context bundle: changed files + imports + callers + tests, ranked, budgeted
 │   ├── reviewer.ts       LLM call, strict JSON parse, finding validation
 │   ├── poster.ts         inline comments + summary review + labels. Dedup lives here.
 │   ├── state.ts          in-process locks, event dedup, latest-commit superseding
-│   ├── pipeline.ts       runReview(): the one review entrypoint. Everything goes through it.
-│   └── watch.ts          poll watched repos → runReview on new PR / new push
+│   ├── pipeline.ts       runReview() + runPushReview(): the review entrypoints. Everything goes through them.
+│   └── watch.ts          poll watched repos → runReview on new PR / PR push; runPushReview on branch push without a PR
 └── tui/                  React/Ink components. No business logic here, ever.
-    ├── App.tsx           setup-on-start router (setup only on first run / after reset)
-    ├── Setup.tsx         wizard: model → GitHub → GitLab
-    ├── Dashboard.tsx     paste box, reviews list, events feed, esc → settings
+    ├── App.tsx           router: login → model (once) → repo → dashboard
+    ├── Login.tsx         sign in: GitHub OAuth / gh CLI / PAT, GitLab PAT
+    ├── RepoScreen.tsx    pick the session repo the dashboard works on
+    ├── Dashboard.tsx     open/closed PR tabs, auto-watch, events feed, settings
+    ├── ReviewViewer.tsx  posted review browser: findings, code context, file filter
     ├── ModelPicker.tsx   provider → model → key (opencode-style)
-    ├── RepoPicker.tsx    pick repos to auto-review from live forge list
+    ├── RepoPicker.tsx    pick extra repos to auto-review from live forge list
     └── theme.tsx         ASCII logo, ACCENT/DIM colors, KeyHint
 ```
 
-Data flow: `cli|tui → pipeline.runReview(job) → forge client → bundler → reviewer → poster`.
+Data flow: `cli|tui → pipeline.runReview(job)|runPushReview(job) → forge client → bundler → reviewer → poster`.
 
 ## Hard invariants — breaking these is a bug, not a refactor
 
@@ -57,6 +60,7 @@ Data flow: `cli|tui → pipeline.runReview(job) → forge client → bundler →
    `<!-- ct:status -->` (status note). Poster dedups findings against existing markers with
    **±3 line tolerance** (LLM line jitter). Never post without a marker; never remove the
    tolerance; never change marker formats (breaks dedup against already-posted comments).
+   Push reviews reuse the same markers on commit comments, deduped per head commit.
 2. **Security: repo config is untrusted.** `norms.ts` strips `agent` and `key_ref` from
    `.codeturtle.yml` — a PR author must never redirect the reviewer or exfiltrate keys.
    Keep stripping; never add a way for repo files to set URLs/keys/commands.
@@ -71,8 +75,9 @@ Data flow: `cli|tui → pipeline.runReview(job) → forge client → bundler →
 6. **Reviewer output is hostile input.** Models return wrong enums, word confidences
    ("high"), fenced JSON. `reviewer.ts` validates every finding and drops invalid ones
    silently. Keep validation strict; coerce only what's unambiguous.
-7. **One review at a time per PR** — `state.ts` lock + superseding by head SHA. Anything
-   that triggers reviews must go through `pipeline.runReview`, which enforces this.
+7. **One review at a time per PR (and per branch for push reviews)** — `state.ts` lock +
+   superseding by head SHA; branch locks are keyed `branch:<name>`. Anything that triggers
+   reviews must go through `pipeline.runReview` / `pipeline.runPushReview`, which enforce this.
 
 ## Coding standards
 

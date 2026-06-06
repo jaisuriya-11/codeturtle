@@ -1,3 +1,4 @@
+import { loadCredentials, resolveToken } from "./config.js";
 import { getForgeClient } from "./forge.js";
 import type { Forge } from "./types.js";
 
@@ -173,5 +174,98 @@ export async function fetchOpenPrs(
     return prs.map((p) => ({ iid: p.iid }));
   } finally {
     await gl.close();
+  }
+}
+
+// ---- dashboard listings (REST — MCP has no PR-list tool we rely on) -------------
+
+export interface PrSummary {
+  iid: number;
+  title: string;
+  state: "open" | "closed";
+  author: string;
+  updatedAt: string;
+}
+
+export function mapGithubPr(raw: any): PrSummary {
+  return {
+    iid: raw.number,
+    title: raw.title ?? "",
+    state: raw.state === "open" ? "open" : "closed",
+    author: raw.user?.login ?? "",
+    updatedAt: raw.updated_at ?? "",
+  };
+}
+
+export function mapGitlabMr(raw: any): PrSummary {
+  return {
+    iid: raw.iid,
+    title: raw.title ?? "",
+    state: raw.state === "opened" ? "open" : "closed",
+    author: raw.author?.username ?? "",
+    updatedAt: raw.updated_at ?? "",
+  };
+}
+
+const githubBase = () => process.env.GITHUB_URL ?? "https://api.github.com";
+const gitlabBase = () =>
+  loadCredentials().gitlab?.url ?? process.env.GITLAB_URL ?? "https://gitlab.com";
+
+const githubHeaders = () => ({
+  Authorization: `Bearer ${resolveToken("github") ?? ""}`,
+  Accept: "application/vnd.github+json",
+});
+const gitlabHeaders = () => ({ "PRIVATE-TOKEN": resolveToken("gitlab") ?? "" });
+
+/** PRs/MRs of a repo by state. GitLab "closed" covers both closed and merged. */
+export async function fetchPrList(
+  forge: Forge,
+  projectId: string,
+  state: "open" | "closed",
+): Promise<PrSummary[]> {
+  if (forge === "github") {
+    const { ensureFreshGithubToken } = await import("./githubAuth.js");
+    await ensureFreshGithubToken();
+    const r = await fetch(
+      `${githubBase()}/repos/${projectId}/pulls?state=${state}&per_page=50&sort=updated&direction=desc`,
+      { headers: githubHeaders(), signal: AbortSignal.timeout(15000) },
+    );
+    if (!r.ok) throw new Error(`github list prs ${r.status}`);
+    return ((await r.json()) as any[]).map(mapGithubPr);
+  }
+  const states = state === "open" ? ["opened"] : ["closed", "merged"];
+  const out: PrSummary[] = [];
+  for (const s of states) {
+    const r = await fetch(
+      `${gitlabBase()}/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests?state=${s}&per_page=50&order_by=updated_at`,
+      { headers: gitlabHeaders(), signal: AbortSignal.timeout(15000) },
+    );
+    if (!r.ok) throw new Error(`gitlab list mrs ${r.status}`);
+    out.push(...((await r.json()) as any[]).map(mapGitlabMr));
+  }
+  return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** The user's repos on a forge, most recently active first. Soft call: [] on failure. */
+export async function listRepos(forge: Forge): Promise<string[]> {
+  try {
+    if (forge === "github") {
+      const { ensureFreshGithubToken } = await import("./githubAuth.js");
+      await ensureFreshGithubToken();
+      const r = await fetch(`${githubBase()}/user/repos?per_page=50&sort=pushed`, {
+        headers: githubHeaders(),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) return [];
+      return ((await r.json()) as any[]).map((x) => x.full_name);
+    }
+    const r = await fetch(
+      `${gitlabBase()}/api/v4/projects?membership=true&per_page=50&order_by=last_activity_at`,
+      { headers: gitlabHeaders(), signal: AbortSignal.timeout(15000) },
+    );
+    if (!r.ok) return [];
+    return ((await r.json()) as any[]).map((x) => String(x.path_with_namespace ?? x.id));
+  } catch {
+    return [];
   }
 }

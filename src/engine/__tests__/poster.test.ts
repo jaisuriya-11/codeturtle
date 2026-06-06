@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { snapFindings } from "../poster.js";
-import type { FileDiff, Finding } from "../types.js";
+import { finalizeCommit, snapFindings } from "../poster.js";
+import type { FileDiff, Finding, ReviewResult } from "../types.js";
+import { installFetch } from "./helpers/fetchMock.js";
 
 // hunk +1,4: line1 ctx, line2 added, line3 ctx, line4 added
 const patch = ["@@ -1,3 +1,4 @@", " context1", "+added2", " context3", "+added4"].join("\n");
@@ -50,5 +51,41 @@ describe("snapFindings", () => {
     const [out] = snapFindings(diffs, [{ ...f, file: "other.ts" }]);
     expect(out.line).toBe(2);
     expect(out.suggestedCode).toBe("fixed();");
+  });
+});
+
+describe("finalizeCommit", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const result: ReviewResult = { findings: [], summary: "overall fine" };
+
+  it("dedups against existing commit markers (±3) and posts one summary", async () => {
+    const { calls } = installFetch((url, init) => {
+      if (!init?.method) {
+        // existing comments on the commit: a finding near a.ts:2 (within ±3)
+        return { json: [{ body: "<!-- ct:f:a.ts:4 -->\nold finding" }] };
+      }
+      return { json: {} };
+    });
+
+    await finalizeCommit(
+      "github", "o/r", "feat", "sha1", diffs, result,
+      [finding(2), { ...finding(2), file: "b.ts" }],
+    );
+
+    const posts = calls.filter((c) => c.init?.method === "POST");
+    const bodies = posts.map((p) => JSON.parse(String(p.init?.body)));
+    // a.ts:2 deduped (marker a.ts:4 within tolerance) → only b.ts + summary
+    expect(posts).toHaveLength(2);
+    expect(bodies[0].body).toContain("<!-- ct:f:b.ts:2 -->");
+    expect(bodies[1].body).toContain("<!-- ct:review -->");
+    expect(bodies[1].body).toContain("push to `feat`");
+  });
+
+  it("doesn't repost the summary when the commit already has one", async () => {
+    const { calls } = installFetch((url, init) =>
+      !init?.method ? { json: [{ body: "<!-- ct:review -->\nseen" }] } : { json: {} },
+    );
+    await finalizeCommit("github", "o/r", "feat", "sha1", diffs, result, []);
+    expect(calls.filter((c) => c.init?.method === "POST")).toHaveLength(0);
   });
 });
