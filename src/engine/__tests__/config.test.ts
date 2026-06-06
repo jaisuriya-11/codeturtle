@@ -108,7 +108,7 @@ describe("reviewerConfigured", () => {
 });
 
 describe("resetLogin", () => {
-  it("drops tokens and watch targets, keeps client id and reviewer config", () => {
+  it("drops tokens, watch targets and reviewer config, keeps the client id", () => {
     setForge("github", { token: "t", user: "u", client_id: "cid" });
     setForge("gitlab", { token: "t2" });
     updateConfig("reviewer", { model: "m", api_key: "k" });
@@ -118,9 +118,10 @@ describe("resetLogin", () => {
 
     expect(loadCredentials().github).toEqual({ client_id: "cid" });
     expect(loadCredentials().gitlab).toBeUndefined();
-    expect(loadConfig().reviewer).toMatchObject({ model: "m", api_key: "k" });
+    expect(loadConfig().reviewer).toBeUndefined(); // next sign-in re-runs model setup
     expect(loadConfig().watch).toEqual({ targets: [], interval: 45 });
     expect(hasForgeCredentials()).toBe(false);
+    expect(reviewerConfigured()).toBe(false);
   });
 });
 

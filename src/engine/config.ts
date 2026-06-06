@@ -37,6 +37,9 @@ export interface ReviewerConfig {
   base_url?: string;
   model?: string;
   bot_name?: string;
+  /** review passes per run: 1 = single (default), 2 adds a security-only pass,
+   * 3 adds a logic-only pass. More passes = better recall on small models. */
+  passes?: number;
 }
 
 export interface WatchConfig {
@@ -112,6 +115,7 @@ export interface ReviewerSettings {
   baseUrl: string;
   model: string;
   botName: string;
+  passes: number;
 }
 
 export function getBotName(model: string, customBotName?: string): string {
@@ -131,6 +135,7 @@ export function reviewerSettings(): ReviewerSettings {
   const apiKey = process.env.REVIEWER_API_KEY ?? process.env.GEMINI_API_KEY ?? cfg.api_key ?? "";
   const model = process.env.REVIEWER_MODEL ?? cfg.model ?? "gemini-2.5-flash";
   const botName = process.env.REVIEWER_BOT_NAME ?? cfg.bot_name ?? getBotName(model);
+  const rawPasses = Number(process.env.REVIEWER_PASSES ?? cfg.passes ?? 1);
   return {
     apiKey,
     baseUrl:
@@ -139,6 +144,7 @@ export function reviewerSettings(): ReviewerSettings {
       "https://generativelanguage.googleapis.com/v1beta/openai/",
     model,
     botName,
+    passes: Number.isFinite(rawPasses) ? Math.max(1, Math.min(3, Math.trunc(rawPasses))) : 1,
   };
 }
 
@@ -148,17 +154,17 @@ export function reviewerConfigured(): boolean {
   return !!s.apiKey || s.baseUrl.includes("localhost");
 }
 
-/** Sign out: drop forge credentials and watched repos. Keeps the github OAuth
- * client id (public, reused on next sign-in) and the reviewer/model config. */
+/** Sign out: drop forge credentials, watched repos, and the reviewer/model
+ * config (so the next sign-in walks through model setup again). Keeps the
+ * github OAuth client id — public, reused on next sign-in. */
 export function resetLogin(): void {
   const clientId = loadCredentials().github?.client_id;
   rmSync(CRED_PATH, { force: true });
   if (clientId) writeJson(CRED_PATH, { github: { client_id: clientId } });
   const cfg = loadConfig();
-  if (cfg.watch?.targets?.length) {
-    cfg.watch = { ...cfg.watch, targets: [] };
-    writeJson(CONFIG_PATH, cfg);
-  }
+  delete cfg.reviewer;
+  if (cfg.watch) cfg.watch = { ...cfg.watch, targets: [] };
+  writeJson(CONFIG_PATH, cfg);
 }
 
 /** Wipe all local config: credentials, settings, logs, pid, locks. */

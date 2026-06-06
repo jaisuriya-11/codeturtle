@@ -115,6 +115,21 @@ describe("watch loop", () => {
     expect(wh.runPushReview).not.toHaveBeenCalled();
   });
 
+  it("skips malformed targets but keeps watching the valid ones", async () => {
+    const ctrl = new AbortController();
+    const logs: string[] = [];
+    await watch(["bogus", "github:o/r"], {
+      intervalSec: 300,
+      signal: ctrl.signal,
+      log: (m) => {
+        logs.push(m);
+        if (m.includes("baseline")) ctrl.abort();
+      },
+    });
+    expect(logs.some((m) => m.includes('skipping bad watch target "bogus"'))).toBe(true);
+    expect(logs.some((m) => m.includes("baseline github:o/r#1"))).toBe(true);
+  });
+
   it("survives a poll error without throwing", async () => {
     wh.client.listOpenPrs = vi.fn(async () => {
       throw new Error("network down");

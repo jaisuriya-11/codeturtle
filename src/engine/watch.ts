@@ -2,7 +2,7 @@
  * branches with no open PR (commit-comment reviews). Baselines already-open
  * PRs and existing branches on the first cycle, then reacts to changes. */
 
-import { getForgeClient } from "./forge.js";
+import { describeError, getForgeClient } from "./forge.js";
 import { listBranches } from "./forgeCommits.js";
 import { runPushReview, runReview, type Logger } from "./pipeline.js";
 import * as state from "./state.js";
@@ -31,7 +31,15 @@ export interface WatchOptions {
 
 export async function watch(targets: string[], opts: WatchOptions): Promise<void> {
   const log = opts.log ?? console.log;
-  const parsed = targets.map(parseTarget);
+  // one malformed target in config must not kill the whole watcher
+  const parsed: { forge: Forge; repo: string }[] = [];
+  for (const t of targets) {
+    try {
+      parsed.push(parseTarget(t));
+    } catch (e) {
+      log(`skipping bad watch target "${t}": ${e instanceof Error ? e.message : e}`);
+    }
+  }
   const seen = new Map<string, string>();
   const seenBranches = new Map<string, string>();
   let firstCycle = true;
@@ -90,22 +98,24 @@ export async function watch(targets: string[], opts: WatchOptions): Promise<void
         }
       } catch (e) {
         if (!opts.signal?.aborted) {
-          log(`poll failed ${forge}:${repo}: ${e instanceof Error ? e.message : e}`);
+          log(`poll failed ${forge}:${repo}: ${describeError(e)}`);
         }
       }
     }
 
     if (opts.signal?.aborted) break;
 
+    // runReview/runPushReview catch internally; the .catch is a last-resort
+    // guard — an unhandled rejection here would take down the process
     for (const job of jobs) {
       if (opts.signal?.aborted) break;
       opts.onJob?.(job);
-      void runReview(job, log);
+      runReview(job, log).catch((e) => log(`review crashed pr=${job.prNumber}: ${describeError(e)}`));
     }
     for (const job of pushJobs) {
       if (opts.signal?.aborted) break;
       opts.onPushJob?.(job);
-      void runPushReview(job, log);
+      runPushReview(job, log).catch((e) => log(`review crashed branch=${job.branch}: ${describeError(e)}`));
     }
     firstCycle = false;
 

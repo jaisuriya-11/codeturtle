@@ -38,13 +38,18 @@ describe("detectLocalModels", () => {
     expect(calls[0].url).toBe("http://localhost:11434/v1/models");
   });
 
-  it("returns [] on a non-ok response", async () => {
-    installFetch(() => ({ status: 500 }));
-    expect(await detectLocalModels("http://localhost:1234/v1")).toEqual([]);
+  it("returns [] when the server is up but has no models (fresh Ollama: data null)", async () => {
+    installFetch(() => ({ json: { object: "list", data: null } }));
+    expect(await detectLocalModels("http://localhost:11434/v1")).toEqual([]);
   });
 
-  it("returns [] when the request throws", async () => {
+  it("returns null on a non-ok response", async () => {
+    installFetch(() => ({ status: 500 }));
+    expect(await detectLocalModels("http://localhost:1234/v1")).toBeNull();
+  });
+
+  it("returns null when the request throws (server unreachable)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ECONNREFUSED"); }));
-    expect(await detectLocalModels("http://localhost:9/v1")).toEqual([]);
+    expect(await detectLocalModels("http://localhost:9/v1")).toBeNull();
   });
 });

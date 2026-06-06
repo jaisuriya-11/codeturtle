@@ -2,21 +2,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ContextBundle, Norms } from "../types.js";
 
-// hoisted so the (hoisted) vi.mock factory can reach it
-const h = vi.hoisted(() => ({ content: "{}" }));
+// hoisted so the (hoisted) vi.mock factory can reach it. queue serves per-call
+// responses (multi-pass tests); errors throws status codes first (retry tests);
+// when both are empty, every call gets `content`.
+const h = vi.hoisted(() => ({
+  content: "{}", queue: [] as string[], errors: [] as number[], calls: 0,
+}));
 
 vi.mock("openai", () => ({
   default: class {
     chat = {
       completions: {
-        create: vi.fn(async () => ({ choices: [{ message: { content: h.content } }] })),
+        create: vi.fn(async () => {
+          h.calls++;
+          if (h.errors.length) {
+            const status = h.errors.shift()!;
+            throw Object.assign(new Error(`${status} status code`), { status });
+          }
+          const c = h.queue.length ? h.queue.shift()! : h.content;
+          return { choices: [{ message: { content: c } }] };
+        }),
       },
     };
   },
 }));
 
 // imported after the mock is registered
-const { review } = await import("../reviewer.js");
+const { review, dedupeFindings } = await import("../reviewer.js");
 
 const ctx: ContextBundle = { files: [], notes: [] };
 const norms: Norms = {
@@ -27,9 +39,15 @@ const norms: Norms = {
 
 beforeEach(() => {
   process.env.REVIEWER_API_KEY = "k"; // so review() doesn't bail on missing key
+  process.env.REVIEWER_RETRY_BASE_MS = "1"; // keep retry tests instant
+  h.queue = [];
+  h.errors = [];
+  h.calls = 0;
 });
 afterEach(() => {
   delete process.env.REVIEWER_API_KEY;
+  delete process.env.REVIEWER_PASSES;
+  delete process.env.REVIEWER_RETRY_BASE_MS;
 });
 
 describe("review (hostile reviewer output)", () => {
@@ -75,6 +93,52 @@ describe("review (hostile reviewer output)", () => {
     });
     const r = await review("@@ -0,0 +1,1 @@\n+const x = 1;\n", ctx, norms);
     expect(r.findings).toHaveLength(1);
+  });
+
+  it("unions findings across passes and dedups repeats (passes=3)", async () => {
+    process.env.REVIEWER_PASSES = "3";
+    const f = (file: string, line: number, category: string, confidence: number) => ({
+      file, line, category, confidence, severity: "critical", title: "t", comment: "c",
+    });
+    h.queue = [
+      JSON.stringify({ findings: [f("a.ts", 5, "security", 0.7)], summary: "general view" }),
+      // security pass re-finds a.ts:6 (±3 dup, higher confidence) + a new one
+      JSON.stringify({ findings: [f("a.ts", 6, "security", 0.95), f("b.ts", 9, "security", 0.9)], summary: "x" }),
+      JSON.stringify({ findings: [f("c.ts", 1, "bug", 0.8)], summary: "y" }),
+    ];
+    const r = await review("diff", ctx, norms);
+    expect(h.calls).toBe(3);
+    expect(r.summary).toBe("general view"); // summary comes from the general pass
+    expect(r.findings).toHaveLength(3);
+    const aDup = r.findings.find((x) => x.file === "a.ts");
+    expect(aDup?.confidence).toBeCloseTo(0.95); // higher-confidence copy wins
+  });
+
+  it("runs a single call when passes=1 (default)", async () => {
+    h.content = JSON.stringify({ findings: [], summary: "ok" });
+    await review("diff", ctx, norms);
+    expect(h.calls).toBe(1);
+  });
+
+  it("retries rate limits (429) with backoff and succeeds", async () => {
+    h.errors = [429, 429];
+    h.content = JSON.stringify({ findings: [], summary: "after retries" });
+    const r = await review("diff", ctx, norms);
+    expect(r.summary).toBe("after retries");
+    expect(h.calls).toBe(3);
+  });
+
+  it("gives up after exhausting retries on a persistent 429", async () => {
+    h.errors = [429, 429, 429];
+    await expect(review("diff", ctx, norms)).rejects.toThrow("429");
+  });
+
+  it("strips response_format only on a 400-style rejection", async () => {
+    h.errors = [400]; // first call (with response_format) rejected
+    h.content = JSON.stringify({ findings: [], summary: "fallback ok" });
+    const r = await review("diff", ctx, norms);
+    expect(r.summary).toBe("fallback ok");
+    expect(h.calls).toBe(2);
   });
 
   it("parses JSON wrapped in markdown fences", async () => {

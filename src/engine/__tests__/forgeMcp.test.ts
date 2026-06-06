@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetAll, setForge } from "../config.js";
+import type { DiffRefs } from "../types.js";
+import { installFetch } from "./helpers/fetchMock.js";
+
+const refs: DiffRefs = { head_sha: "h", base_sha: "b", start_sha: "b" };
 
 // configurable MCP tool handler + a record of calls
 const mh = vi.hoisted(() => ({
@@ -29,7 +33,10 @@ beforeEach(() => {
   setForge("github", { token: "ghp_x" });
   mh.calls.length = 0;
 });
-afterEach(() => resetAll());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  resetAll();
+});
 
 describe("GitHubMcpClient", () => {
   it("getMr maps the pull_request_read response", async () => {
@@ -74,17 +81,43 @@ describe("GitHubMcpClient", () => {
     expect(await new GitHubMcpClient().searchBlobs("o/r", "sym")).toEqual([{ path: "a.ts" }]);
   });
 
-  it("listNotes merges comment + review-comment arrays", async () => {
-    mh.handler = (_n, args) =>
-      args.method === "get_comments"
-        ? { text: JSON.stringify([{ id: 1, body: "c1" }]), content: null, isError: false }
-        : { text: JSON.stringify([{ id: 2, body: "c2" }]), content: null, isError: false };
+  it("listNotes goes through REST and merges issue + review comments", async () => {
+    installFetch((url) =>
+      url.includes("/issues/")
+        ? { json: [{ id: 1, body: "c1" }] }
+        : { json: [{ id: 2, body: "c2" }] },
+    );
     const notes = await new GitHubMcpClient().listNotes("o/r", 1);
     expect(notes.map((n) => n.body)).toEqual(expect.arrayContaining(["c1", "c2"]));
+    expect(mh.calls).toHaveLength(0); // no MCP tool involved
   });
 
-  it("postStatus returns the no-edit sentinel without calling the server", async () => {
-    expect(await new GitHubMcpClient().postStatus()).toBe("mcp-status");
+  it("postStatus posts a sticky comment via REST, editable on completion", async () => {
+    const { calls } = installFetch((url, init) =>
+      init?.method === "POST" ? { json: { id: 42 } } : { json: [] },
+    );
+    const c = new GitHubMcpClient();
+    const id = await c.postStatus("o/r", 1, "reviewing…");
+    expect(id).toBe(42);
+    await c.editNote("o/r", 1, id, "done");
+    const patch = calls.find((x) => x.init?.method === "PATCH");
+    expect(patch?.url).toContain("/issues/comments/42");
+    expect(mh.calls).toHaveLength(0);
+  });
+
+  it("reuses a leftover pending review instead of dropping inline comments", async () => {
+    mh.handler = (name, args) => {
+      if (name === "pull_request_review_write" && args.method === "create") {
+        return { text: "a pending review already exists", content: null, isError: true };
+      }
+      if (name === "pull_request_read" && args.method === "get_reviews") {
+        return { text: JSON.stringify([{ id: 9, state: "PENDING" }]), content: null, isError: false };
+      }
+      return { text: "{}", content: null, isError: false };
+    };
+    const ok = await new GitHubMcpClient().postInlineNote("o/r", 1, "a.ts", 5, "b", refs);
+    expect(ok).toBe(true);
+    expect(mh.calls.some((x) => x.name === "add_comment_to_pending_review")).toBe(true);
   });
 
   it("addLabels merges with existing labels", async () => {
