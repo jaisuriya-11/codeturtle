@@ -1,9 +1,8 @@
 /** Dashboard for the chosen repo: opened/closed PR lists fetched live, with the
  * watcher auto-reviewing new PRs and new pushes to this repo.
- * Keys: enter review · v view review · tab switch list · r change repo · s settings. */
+ * Keys: enter review · v view review · tab switch list · R refresh · r change repo · s settings. */
 
 import { Box, Text, useApp, useInput } from "ink";
-import SelectInput from "ink-select-input";
 import Spinner from "ink-spinner";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -18,27 +17,17 @@ import {
 import { runReview } from "../engine/pipeline.js";
 import { fetchPrList, type PrSummary } from "../engine/viewer.js";
 import { watch } from "../engine/watch.js";
+import { PrList, type PrStatus } from "./dashboard/PrList.js";
+import { SettingsOverlay, type SettingsView } from "./dashboard/SettingsOverlay.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { RepoPicker } from "./RepoPicker.js";
 import type { RepoRef } from "./RepoScreen.js";
 import { ReviewViewer } from "./ReviewViewer.js";
 import { ACCENT, DIM, Header, KeyHint } from "./theme.js";
 
-type Overlay =
-  | "none"
-  | "settings"
-  | "general"
-  | "model"
-  | "repos"
-  | "confirmReset"
-  | "viewReview";
+type Overlay = "none" | "settings" | "general" | "model" | "repos" | "confirmReset" | "viewReview";
 
 type Tab = "open" | "closed";
-
-interface PrStatus {
-  status: "running" | "done" | "failed";
-  detail: string;
-}
 
 const ts = () => new Date().toLocaleTimeString();
 
@@ -65,6 +54,7 @@ export function Dashboard({
   const [pendingPr, setPendingPr] = useState<number | null>(null);
   const [viewPr, setViewPr] = useState<number | null>(null);
   const [watching, setWatching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const creds = loadCredentials();
@@ -118,6 +108,44 @@ export function Dashboard({
   useEffect(() => {
     void loadPrs();
   }, [loadPrs]);
+
+  // refresh (manual R or auto-timer): refetch both lists in place — no loading wipe,
+  // selection kept. A PR raised, closed or merged after the dashboard opened shows up
+  // here; silent mode keeps a flaky network from spamming the events feed.
+  const refreshAll = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (refreshing) return;
+      setRefreshing(true);
+      try {
+        const [open, closed] = await Promise.all([
+          fetchPrList(repo.forge, repo.projectId, "open"),
+          fetchPrList(repo.forge, repo.projectId, "closed"),
+        ]);
+        setListError(null);
+        setOpenPrs(open);
+        setClosedPrs(closed);
+        // selection may point past the end if the active list shrank
+        const current = tab === "open" ? open : closed;
+        setActiveIndex((i) => Math.min(i, Math.max(0, current.length - 1)));
+      } catch (e) {
+        if (!opts?.silent) addEvent(`refresh failed: ${e instanceof Error ? e.message : e}`);
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [refreshing, repo.forge, repo.projectId, tab, addEvent],
+  );
+
+  // auto-refresh both lists on the watch cadence: the watcher only signals new
+  // jobs (new PR / push), so closes, merges and title edits need their own poll.
+  const refreshAllRef = useRef(refreshAll);
+  useEffect(() => {
+    refreshAllRef.current = refreshAll;
+  }, [refreshAll]);
+  useEffect(() => {
+    const id = setInterval(() => void refreshAllRef.current({ silent: true }), interval * 1000);
+    return () => clearInterval(id);
+  }, [interval]);
 
   // a new PR raised while watching should appear in the open list
   const refreshOpen = useCallback(async () => {
@@ -214,6 +242,8 @@ export function Dashboard({
       } else if (input === "v" && selected) {
         setViewPr(selected.iid);
         setOverlay("viewReview");
+      } else if (input === "R") {
+        void refreshAll();
       } else if (input === "r") {
         abortRef.current?.abort();
         onChangeRepo();
@@ -236,7 +266,10 @@ export function Dashboard({
         <ModelPicker
           onDone={(c) => {
             updateConfig("reviewer", {
-              provider: c.provider, api_key: c.apiKey, base_url: c.baseUrl, model: c.model,
+              provider: c.provider,
+              api_key: c.apiKey,
+              base_url: c.baseUrl,
+              model: c.model,
             });
             setModel(c.model);
             setOverlay("none");
@@ -259,33 +292,6 @@ export function Dashboard({
     );
   }
 
-  if (overlay === "confirmReset") {
-    return (
-      <Box flexDirection="column">
-        <Header />
-        <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column">
-          <Text color="red" bold>Reset login, repos & model?</Text>
-          <Text>Signs out (deletes forge tokens), clears watched repos and the review model/API key.</Text>
-          <Box marginTop={1}>
-            <SelectInput
-              items={[
-                { label: "Cancel", value: "cancel" },
-                { label: "Yes — sign out", value: "wipe" },
-              ]}
-              onSelect={(item) => {
-                if (item.value === "wipe") {
-                  abortRef.current?.abort();
-                  resetLogin();
-                  onReset();
-                } else setOverlay("settings");
-              }}
-            />
-          </Box>
-        </Box>
-      </Box>
-    );
-  }
-
   if (overlay === "viewReview" && viewPr != null) {
     return (
       <ReviewViewer
@@ -297,59 +303,29 @@ export function Dashboard({
     );
   }
 
-  if (overlay === "settings") {
+  if (overlay === "settings" || overlay === "general" || overlay === "confirmReset") {
     return (
-      <Box flexDirection="column">
-        <Header subtitle="Settings" />
-        <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-          <SelectInput
-            items={[
-              { label: "← Back", value: "back" },
-              { label: "General settings", value: "general" },
-              { label: "Reset config", value: "reset" },
-              { label: "Quit code turtle", value: "quit" },
-            ]}
-            onSelect={(item) => {
-              if (item.value === "back") setOverlay("none");
-              else if (item.value === "general") setOverlay("general");
-              else if (item.value === "reset") setOverlay("confirmReset");
-              else {
-                abortRef.current?.abort();
-                exit();
-              }
-            }}
-          />
-        </Box>
-      </Box>
-    );
-  }
-
-  if (overlay === "general") {
-    const targets = loadConfig().watch?.targets ?? [];
-    return (
-      <Box flexDirection="column">
-        <Header subtitle="General settings" />
-        <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-          <SelectInput
-            items={[
-              { label: "← Back", value: "back" },
-              { label: `Change model  (${model})`, value: "model" },
-              { label: `Review passes  (${passes} — ${passes === 1 ? "fast" : "thorough"})`, value: "passes" },
-              { label: `Auto-review repos  (${targets.length} watched)`, value: "repos" },
-            ]}
-            onSelect={(item) => {
-              if (item.value === "back") setOverlay("settings");
-              else if (item.value === "model") setOverlay("model");
-              else if (item.value === "passes") {
-                // 1 → 2 → 3 → 1: extra passes re-scan with security/logic checklists
-                const next = passes >= 3 ? 1 : passes + 1;
-                updateConfig("reviewer", { passes: next });
-                setPasses(next);
-              } else setOverlay("repos");
-            }}
-          />
-        </Box>
-      </Box>
+      <SettingsOverlay
+        view={overlay as SettingsView}
+        model={model}
+        passes={passes}
+        onNavigate={(view) => setOverlay(view)}
+        onCyclePasses={() => {
+          // 1 → 2 → 3 → 1: extra passes re-scan with security/logic checklists
+          const next = passes >= 3 ? 1 : passes + 1;
+          updateConfig("reviewer", { passes: next });
+          setPasses(next);
+        }}
+        onQuit={() => {
+          abortRef.current?.abort();
+          exit();
+        }}
+        onConfirmReset={() => {
+          abortRef.current?.abort();
+          resetLogin();
+          onReset();
+        }}
+      />
     );
   }
 
@@ -368,16 +344,6 @@ export function Dashboard({
     </Text>
   );
 
-  // 10-row viewport centred on the selection
-  const visible = (() => {
-    if (!list) return [];
-    const max = 10;
-    let start = Math.max(0, activeIndex - Math.floor(max / 2));
-    const end = Math.min(list.length, start + max);
-    if (end - start < max) start = Math.max(0, end - max);
-    return list.slice(start, end).map((pr, i) => ({ pr, idx: start + i }));
-  })();
-
   return (
     <Box flexDirection="column">
       <Header />
@@ -387,7 +353,9 @@ export function Dashboard({
       </Text>
       {watching ? (
         <Text color={DIM}>
-          <Text color={ACCENT}><Spinner type="dots" /></Text>
+          <Text color={ACCENT}>
+            <Spinner type="dots" />
+          </Text>
           {" watching — new PRs & pushes get reviewed"}
           {` · every ${interval}s`}
         </Text>
@@ -397,37 +365,21 @@ export function Dashboard({
         {renderTab("open", "Opened PRs")}
         <Text color={DIM}>{"   "}</Text>
         {renderTab("closed", "Closed PRs")}
+        {refreshing ? (
+          <Text color={DIM}>
+            {"   "}
+            <Spinner type="dots" /> refreshing…
+          </Text>
+        ) : null}
       </Box>
 
-      <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1} minHeight={6}>
-        {listError ? (
-          <Text color="red">{listError}</Text>
-        ) : list === null ? (
-          <Text color={DIM}>
-            <Spinner type="dots" /> loading {tab} PRs…
-          </Text>
-        ) : list.length === 0 ? (
-          <Text color={DIM}>no {tab} PRs in this repo</Text>
-        ) : (
-          visible.map(({ pr, idx }) => {
-            const isActive = idx === activeIndex;
-            const st = statuses[pr.iid];
-            return (
-              <Text key={pr.iid} color={isActive ? ACCENT : undefined} bold={isActive} wrap="truncate">
-                {isActive ? "❯ " : "  "}#{pr.iid} {pr.title}
-                <Text color={DIM}> · {pr.author}</Text>
-                {st ? (
-                  <Text color={st.status === "failed" ? "red" : st.status === "done" ? ACCENT : "yellow"}>
-                    {"  "}
-                    {st.status === "running" ? "● " : st.status === "done" ? "✓ " : "✗ "}
-                    {st.detail}
-                  </Text>
-                ) : null}
-              </Text>
-            );
-          })
-        )}
-      </Box>
+      <PrList
+        list={list}
+        tab={tab}
+        activeIndex={activeIndex}
+        statuses={statuses}
+        listError={listError}
+      />
 
       <Box flexDirection="column" marginTop={1}>
         <Text bold>Events</Text>
@@ -448,6 +400,7 @@ export function Dashboard({
             ["enter", tab === "open" ? "review PR" : "view review"],
             ["v", "view review"],
             ["tab", "switch list"],
+            ["R", "refresh"],
             ["r", "change repo"],
             ["s", "settings"],
           ]}
