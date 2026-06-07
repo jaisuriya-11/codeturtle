@@ -30,6 +30,7 @@ src/
 │   ├── config.ts         ~/.codeturtle store: credentials.json, config.json, resetAll(). chmod 600.
 │   ├── providers.ts      model-provider registry + local-server model detection
 │   ├── prLink.ts         pasted URL → {forge, projectId, prNumber}
+│   ├── githubApp.ts      GitHub App auth: RS256 JWT → installation token; reviews post as slug[bot]
 │   ├── forge.ts          ForgeClient interface + GitLab REST + GitHub REST fallback + markers
 │   ├── forgeMcp.ts       GitHub via MCP. Pending-review flow. Default GitHub backend.
 │   ├── forgeCommits.ts   commit-level REST ops: branches, push diffs, commit comments
@@ -44,7 +45,7 @@ src/
 │   └── watch.ts          poll watched repos → runReview on new PR / PR push; runPushReview on branch push without a PR
 └── tui/                  React/Ink components. No business logic here, ever.
     ├── App.tsx           router: login → model (once) → repo → dashboard
-    ├── Login.tsx         sign in: GitHub OAuth / gh CLI / PAT, GitLab PAT
+    ├── Login.tsx         sign in: GitHub OAuth / gh CLI / PAT / GitHub App (bot identity), GitLab PAT
     ├── RepoScreen.tsx    pick the session repo the dashboard works on
     ├── Dashboard.tsx     open/closed PR tabs, auto-watch, events feed; owns all dashboard state
     ├── dashboard/        presentational pieces: PrList (viewport+status badges), SettingsOverlay

@@ -95,6 +95,12 @@ Running `codeturtle` with no config launches the [`Setup`](./tui-reference.md#se
      `github.com/login/device`, enter the code, and Code Turtle polls for the token (refreshed
      automatically).
    - **GitHub `gh` CLI session** (reuses `gh auth token`) or **a pasted GitHub PAT** (scope: `repo`).
+   - **GitHub App (bot identity)** — reviews post as `<app-slug>[bot]` instead of your account.
+     Register an app under `github.com/settings/apps` (permissions: pull requests **rw**,
+     contents **ro**, issues **rw**), install it on your repos, generate a private key, then
+     pick this option and enter the app id + key path. The key is copied to
+     `~/.codeturtle/github-app.pem` (0600); installation tokens are minted locally and
+     refreshed before each use — still no server, no webhooks.
    - **GitLab token** (scope: `api`; set `GITLAB_URL` for self-hosted).
 
    You only need **one** of these. GitHub uses the **MCP** backend by default.

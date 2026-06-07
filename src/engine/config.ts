@@ -13,6 +13,8 @@ const CRED_PATH = join(HOME, "credentials.json");
 const CONFIG_PATH = join(HOME, "config.json");
 export const LOG_FILE = join(HOME, "watcher.log");
 export const PID_FILE = join(HOME, "watcher.pid");
+/** GitHub App private key (PEM), copied here on app sign-in. chmod 600. */
+export const GITHUB_APP_KEY_PATH = join(HOME, "github-app.pem");
 
 /** Where global norm packs (*.yml) and code transforms (*.mjs) live. Same trust
  * boundary as the rest of the store — dropping a file here is like installing a plugin. */
@@ -22,13 +24,15 @@ export function normsDir(): string {
 
 export interface ForgeCred {
   token?: string;
-  method?: string; // "pat" | "gh" | "oauth"
+  method?: string; // "pat" | "gh" | "oauth" | "app"
   user?: string;
   url?: string;
   backend?: "mcp" | "rest";
   refresh_token?: string; // oauth device flow — refresh grant
-  expires_at?: number; // oauth — access-token expiry, ms epoch
+  expires_at?: number; // oauth/app — access-token expiry, ms epoch
   client_id?: string; // oauth — the app client id used to obtain/refresh the token
+  app_id?: string; // app — GitHub App id (public)
+  installation_id?: number; // app — installation the token is minted for
 }
 
 export interface ReviewerConfig {
@@ -160,6 +164,7 @@ export function reviewerConfigured(): boolean {
 export function resetLogin(): void {
   const clientId = loadCredentials().github?.client_id;
   rmSync(CRED_PATH, { force: true });
+  rmSync(GITHUB_APP_KEY_PATH, { force: true });
   if (clientId) writeJson(CRED_PATH, { github: { client_id: clientId } });
   const cfg = loadConfig();
   delete cfg.reviewer;
@@ -169,7 +174,7 @@ export function resetLogin(): void {
 
 /** Wipe all local config: credentials, settings, logs, pid, locks. */
 export function resetAll(): void {
-  for (const f of [CRED_PATH, CONFIG_PATH, LOG_FILE, PID_FILE]) {
+  for (const f of [CRED_PATH, CONFIG_PATH, LOG_FILE, PID_FILE, GITHUB_APP_KEY_PATH]) {
     rmSync(f, { force: true });
   }
   rmSync(join(HOME, "locks"), { recursive: true, force: true });
