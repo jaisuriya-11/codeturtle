@@ -23,9 +23,14 @@ describe("GitLabClient (REST)", () => {
   const c = (): ForgeClient => new GitLabClient();
 
   it("getMr maps merge-request fields", async () => {
-    route(() => ({ json: { source_branch: "f", target_branch: "main", sha: "sha1", diff_refs: refs } }));
+    route(() => ({
+      json: { source_branch: "f", target_branch: "main", sha: "sha1", diff_refs: refs },
+    }));
     expect(await c().getMr("g/p", 1)).toEqual({
-      sourceBranch: "f", targetBranch: "main", headSha: "sha1", diffRefs: refs,
+      sourceBranch: "f",
+      targetBranch: "main",
+      headSha: "sha1",
+      diffRefs: refs,
     });
   });
 
@@ -35,7 +40,11 @@ describe("GitLabClient (REST)", () => {
   });
 
   it("getDiffs maps the diff list", async () => {
-    route(() => ({ json: [{ new_path: "a.ts", old_path: "a.ts", diff: "@@", new_file: true, deleted_file: false }] }));
+    route(() => ({
+      json: [
+        { new_path: "a.ts", old_path: "a.ts", diff: "@@", new_file: true, deleted_file: false },
+      ],
+    }));
     const d = await c().getDiffs("g/p", 1);
     expect(d[0]).toMatchObject({ newPath: "a.ts", newFile: true, deletedFile: false });
   });
@@ -49,7 +58,10 @@ describe("GitLabClient (REST)", () => {
 
   it("searchBlobs maps hits and tolerates failure", async () => {
     route(() => ({ json: [{ path: "x.ts" }, { path: "y.ts" }] }));
-    expect(await c().searchBlobs("g/p", "sym", "ref")).toEqual([{ path: "x.ts" }, { path: "y.ts" }]);
+    expect(await c().searchBlobs("g/p", "sym", "ref")).toEqual([
+      { path: "x.ts" },
+      { path: "y.ts" },
+    ]);
     route(() => ({ status: 500 }));
     expect(await c().searchBlobs("g/p", "sym", "ref")).toEqual([]);
   });
@@ -97,9 +109,17 @@ describe("GitLabClient (REST)", () => {
   });
 
   it("listNotes maps id + body", async () => {
-    route(() => ({ json: [{ id: 1, body: "n1" }, { id: 2, body: "n2" }] }));
+    route(() => ({
+      json: [
+        { id: 1, body: "n1" },
+        { id: 2, body: "n2" },
+      ],
+    }));
     const notes = await c().listNotes("g/p", 1);
-    expect(notes).toEqual([{ id: 1, body: "n1" }, { id: 2, body: "n2" }]);
+    expect(notes).toEqual([
+      { id: 1, body: "n1" },
+      { id: 2, body: "n2" },
+    ]);
   });
 
   it("addLabels PUTs labels without throwing", async () => {
@@ -115,7 +135,9 @@ describe("GitHubRestClient (REST)", () => {
   it("getMr maps pull-request fields", async () => {
     route(() => ({ json: { head: { ref: "f", sha: "hs" }, base: { ref: "main", sha: "bs" } } }));
     expect(await c().getMr("o/r", 1)).toEqual({
-      sourceBranch: "f", targetBranch: "main", headSha: "hs",
+      sourceBranch: "f",
+      targetBranch: "main",
+      headSha: "hs",
       diffRefs: { head_sha: "hs", base_sha: "bs", start_sha: "bs" },
     });
   });

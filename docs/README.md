@@ -43,7 +43,7 @@ both call it; the watcher calls it on every new PR / push. See
 
 ## Project facts
 
-- **Language:** TypeScript (strict), ESM only, Node ≥ 18
+- **Language:** TypeScript (strict), ESM only, Node ≥ 22.12
 - **TUI:** React + [Ink](https://github.com/vadimdemedes/ink)
 - **GitHub I/O:** official GitHub remote MCP server (default) — REST fallback available
 - **GitLab I/O:** REST v4

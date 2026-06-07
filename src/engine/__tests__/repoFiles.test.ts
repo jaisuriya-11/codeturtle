@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  exportedSymbols, langOf, parseImports, resolveImport, testCandidates,
+  exportedSymbols,
+  langOf,
+  parseImports,
+  resolveImport,
+  testCandidates,
 } from "../repoFiles.js";
 
 describe("langOf", () => {

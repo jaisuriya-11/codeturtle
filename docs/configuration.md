@@ -15,14 +15,14 @@ Env vars override the store at runtime.
 Set the location with `CODETURTLE_HOME`; defaults to `~/.codeturtle`. Managed by
 [`config.ts`](./engine-reference.md#configts). Every file is written with `chmod 600`.
 
-| File               | Contents                                                                          |
-| ------------------ | --------------------------------------------------------------------------------- |
-| `credentials.json` | per-forge tokens (`token`, `method`, `user`, `url`, `backend`).                   |
-| `config.json`      | the `reviewer`, `watch`, and `norms` sections.                                    |
+| File               | Contents                                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `credentials.json` | per-forge tokens (`token`, `method`, `user`, `url`, `backend`).                                                               |
+| `config.json`      | the `reviewer`, `watch`, and `norms` sections.                                                                                |
 | `norms/`           | custom norm **packs** (`*.yml`) and code **transforms** (`*.mjs`) — see [Custom norms](#custom-norms-global--packs--plugins). |
-| `watcher.log`      | log output (path constant; used by the roadmap daemon).                           |
-| `watcher.pid`      | daemon pid (roadmap).                                                             |
-| `locks/`           | per-PR lock files (10-min TTL) — see [`state.ts`](./engine-reference.md#statets). |
+| `watcher.log`      | log output (path constant; used by the roadmap daemon).                                                                       |
+| `watcher.pid`      | daemon pid (roadmap).                                                                                                         |
+| `locks/`           | per-PR lock files (10-min TTL) — see [`state.ts`](./engine-reference.md#statets).                                             |
 
 > **These file shapes are a compatibility contract** (carried over from the old Python version).
 > Additive changes only — never rename or remove existing fields. See
@@ -54,10 +54,10 @@ access token is refreshed automatically before it expires; you never manage it b
 
 ### GitHub authentication methods
 
-| `method` | How it's obtained | Notes |
-| --- | --- | --- |
-| `pat` | A personal access token you paste, or your `gh auth token` CLI session | Long-lived; you manage rotation. |
-| `oauth` | "Sign in with GitHub" device flow (needs `GITHUB_CLIENT_ID`) | Tokens may expire and are refreshed automatically via the stored `refresh_token`. |
+| `method` | How it's obtained                                                      | Notes                                                                             |
+| -------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `pat`    | A personal access token you paste, or your `gh auth token` CLI session | Long-lived; you manage rotation.                                                  |
+| `oauth`  | "Sign in with GitHub" device flow (needs `GITHUB_CLIENT_ID`)           | Tokens may expire and are refreshed automatically via the stored `refresh_token`. |
 
 > **Device flow requires a registered GitHub OAuth App or GitHub App** whose client id you supply
 > via `GITHUB_CLIENT_ID`. For refresh to work, the app must issue **expiring** user tokens (a
@@ -68,7 +68,7 @@ access token is refreshed automatically before it expires; you never manage it b
 
 The `client_id` comes from a GitHub app you register once. Because Code Turtle is built for
 **expiring tokens with refresh**, a **GitHub App** is the right choice — it issues short-lived user
-tokens *plus* a refresh token and supports device flow. (A plain OAuth App also yields a client id
+tokens _plus_ a refresh token and supports device flow. (A plain OAuth App also yields a client id
 and works, but its tokens never expire and have no refresh token, so the refresh path stays
 dormant.)
 
@@ -78,7 +78,7 @@ dormant.)
    (org-owned: **Org Settings → Developer settings → GitHub Apps**).
 2. **Name** — anything (e.g. "My Code Turtle"). **Homepage URL** — any URL.
 3. **Callback URL** — the form requires one; any URL works (device flow ignores it).
-4. **Enable Device Flow** — ✅ check this. *(The key setting.)*
+4. **Enable Device Flow** — ✅ check this. _(The key setting.)_
 5. **Webhook** — uncheck **Active** (Code Turtle is webhook-free).
 6. **Repository permissions:** Pull requests → **Read & write**; Contents → **Read-only**
    (fetch files for review context); Metadata → **Read-only** (mandatory).
@@ -146,22 +146,22 @@ without the env var.
 Env vars take precedence over the store. (Resolution lives in
 [`config.ts`](./engine-reference.md#configts) / [`forge.ts`](./engine-reference.md#forgets).)
 
-| Variable                                            | Effect                                                               |
-| --------------------------------------------------- | -------------------------------------------------------------------- |
-| `CODETURTLE_HOME`                                   | override the store directory.                                        |
-| `GITHUB_TOKEN` / `GITLAB_TOKEN` / `BITBUCKET_TOKEN` | forge token fallback when not in the store.                          |
-| `GITHUB_BACKEND`                                    | `rest` forces the GitHub REST client; anything else → MCP (default). |
+| Variable                                            | Effect                                                                                  |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `CODETURTLE_HOME`                                   | override the store directory.                                                           |
+| `GITHUB_TOKEN` / `GITLAB_TOKEN` / `BITBUCKET_TOKEN` | forge token fallback when not in the store.                                             |
+| `GITHUB_BACKEND`                                    | `rest` forces the GitHub REST client; anything else → MCP (default).                    |
 | `GITHUB_CLIENT_ID`                                  | GitHub OAuth/App client id that enables the "Sign in with GitHub" device flow in setup. |
-| `GITHUB_URL`                                        | GitHub REST API base (default `https://api.github.com`).             |
-| `GITLAB_URL`                                        | GitLab base URL (self-hosted).                                       |
-| `REVIEWER_API_KEY` / `GEMINI_API_KEY`               | reviewer key (the latter is a legacy fallback).                      |
-| `REVIEWER_BASE_URL`                                 | reviewer endpoint (any OpenAI-compatible URL).                       |
-| `REVIEWER_MODEL`                                    | reviewer model id.                                                   |
-| `REVIEWER_BOT_NAME`                                 | display name on posted comments.                                     |
-| `MAX_DIFF_CHARS`                                    | diff budget sent to the LLM (default 40000).                         |
-| `MAX_CONTEXT_FILES`                                 | max context files in the bundle (default 12).                        |
-| `MAX_CONTEXT_CHARS`                                 | max total context chars (default 40000).                             |
-| `CT_DEBUG`                                          | log the first 800 chars of the raw model response.                   |
+| `GITHUB_URL`                                        | GitHub REST API base (default `https://api.github.com`).                                |
+| `GITLAB_URL`                                        | GitLab base URL (self-hosted).                                                          |
+| `REVIEWER_API_KEY` / `GEMINI_API_KEY`               | reviewer key (the latter is a legacy fallback).                                         |
+| `REVIEWER_BASE_URL`                                 | reviewer endpoint (any OpenAI-compatible URL).                                          |
+| `REVIEWER_MODEL`                                    | reviewer model id.                                                                      |
+| `REVIEWER_BOT_NAME`                                 | display name on posted comments.                                                        |
+| `MAX_DIFF_CHARS`                                    | diff budget sent to the LLM (default 40000).                                            |
+| `MAX_CONTEXT_FILES`                                 | max context files in the bundle (default 12).                                           |
+| `MAX_CONTEXT_CHARS`                                 | max total context chars (default 40000).                                                |
+| `CT_DEBUG`                                          | log the first 800 chars of the raw model response.                                      |
 
 For local servers (Ollama, LM Studio) the reviewer works with no API key as long as the base URL
 contains `localhost`.

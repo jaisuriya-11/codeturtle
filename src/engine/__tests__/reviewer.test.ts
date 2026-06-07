@@ -6,7 +6,10 @@ import type { ContextBundle, Norms } from "../types.js";
 // responses (multi-pass tests); errors throws status codes first (retry tests);
 // when both are empty, every call gets `content`.
 const h = vi.hoisted(() => ({
-  content: "{}", queue: [] as string[], errors: [] as number[], calls: 0,
+  content: "{}",
+  queue: [] as string[],
+  errors: [] as number[],
+  calls: 0,
 }));
 
 vi.mock("openai", () => ({
@@ -28,13 +31,16 @@ vi.mock("openai", () => ({
 }));
 
 // imported after the mock is registered
-const { review, dedupeFindings } = await import("../reviewer.js");
+const { review } = await import("../reviewer.js");
 
 const ctx: ContextBundle = { files: [], notes: [] };
 const norms: Norms = {
-  confidenceThreshold: 0.7, maxFindings: 25, exclude: [],
+  confidenceThreshold: 0.7,
+  maxFindings: 25,
+  exclude: [],
   categories: { security: true, bug: true, perf: true, style: true, maintainability: true },
-  guidelines: "", examples: [],
+  guidelines: "",
+  examples: [],
 };
 
 beforeEach(() => {
@@ -54,7 +60,15 @@ describe("review (hostile reviewer output)", () => {
   it("drops invalid findings and coerces word-confidence", async () => {
     h.content = JSON.stringify({
       findings: [
-        { file: "a.ts", line: 5, severity: "critical", category: "bug", confidence: 0.8, title: "t", comment: "c" },
+        {
+          file: "a.ts",
+          line: 5,
+          severity: "critical",
+          category: "bug",
+          confidence: 0.8,
+          title: "t",
+          comment: "c",
+        },
         { line: 3, severity: "warning", category: "bug", confidence: 0.5 }, // no file → dropped
         { file: "b.ts", line: 2, severity: "BOGUS", category: "bug", confidence: 0.5 }, // bad severity → dropped
         { file: "c.ts", line: 1, severity: "info", category: "style", confidence: "high" }, // word → 0.9
@@ -69,7 +83,14 @@ describe("review (hostile reviewer output)", () => {
   });
 
   it("drops a finding whose evidence is not in the diff (hallucination gate)", async () => {
-    const base = { line: 5, severity: "critical", category: "bug", confidence: 0.9, title: "t", comment: "c" };
+    const base = {
+      line: 5,
+      severity: "critical",
+      category: "bug",
+      confidence: 0.9,
+      title: "t",
+      comment: "c",
+    };
     h.content = JSON.stringify({
       findings: [
         { ...base, file: "real.ts", evidence: "if (x.isAfter(now))" },
@@ -85,10 +106,18 @@ describe("review (hostile reviewer output)", () => {
 
   it("matches evidence whitespace-insensitively", async () => {
     h.content = JSON.stringify({
-      findings: [{
-        file: "a.ts", line: 1, severity: "info", category: "style", confidence: 0.8,
-        title: "t", comment: "c", evidence: "const  x=1;",
-      }],
+      findings: [
+        {
+          file: "a.ts",
+          line: 1,
+          severity: "info",
+          category: "style",
+          confidence: 0.8,
+          title: "t",
+          comment: "c",
+          evidence: "const  x=1;",
+        },
+      ],
       summary: "ok",
     });
     const r = await review("@@ -0,0 +1,1 @@\n+const x = 1;\n", ctx, norms);
@@ -98,12 +127,21 @@ describe("review (hostile reviewer output)", () => {
   it("unions findings across passes and dedups repeats (passes=3)", async () => {
     process.env.REVIEWER_PASSES = "3";
     const f = (file: string, line: number, category: string, confidence: number) => ({
-      file, line, category, confidence, severity: "critical", title: "t", comment: "c",
+      file,
+      line,
+      category,
+      confidence,
+      severity: "critical",
+      title: "t",
+      comment: "c",
     });
     h.queue = [
       JSON.stringify({ findings: [f("a.ts", 5, "security", 0.7)], summary: "general view" }),
       // security pass re-finds a.ts:6 (±3 dup, higher confidence) + a new one
-      JSON.stringify({ findings: [f("a.ts", 6, "security", 0.95), f("b.ts", 9, "security", 0.9)], summary: "x" }),
+      JSON.stringify({
+        findings: [f("a.ts", 6, "security", 0.95), f("b.ts", 9, "security", 0.9)],
+        summary: "x",
+      }),
       JSON.stringify({ findings: [f("c.ts", 1, "bug", 0.8)], summary: "y" }),
     ];
     const r = await review("diff", ctx, norms);

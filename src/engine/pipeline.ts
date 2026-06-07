@@ -65,12 +65,19 @@ export async function runReview(job: Job, log: Logger = console.log): Promise<vo
       await gl.editNote(projectId, prNumber, statusId, "<!-- ct:status -->\n🐢 Nothing to review.");
       return;
     }
-    const norms = await loadNorms(gl, projectId, mr, { forge: job.forge, diffLines: countAddedLines(diffs) });
+    const norms = await loadNorms(gl, projectId, mr, {
+      forge: job.forge,
+      diffLines: countAddedLines(diffs),
+    });
     const filtered = applyExcludes(diffs, norms);
     if (!filtered.length) {
       log(`pr=${prNumber} all changed files excluded`);
-      await gl.editNote(projectId, prNumber, statusId,
-        "<!-- ct:status -->\n🐢 All changed files are excluded by norms.");
+      await gl.editNote(
+        projectId,
+        prNumber,
+        statusId,
+        "<!-- ct:status -->\n🐢 All changed files are excluded by norms.",
+      );
       return;
     }
     const context = await buildContext(gl, projectId, headRef, filtered, norms, log);
@@ -114,10 +121,15 @@ export async function runPushReview(job: PushJob, log: Logger = console.log): Pr
     }
     // norms loader only needs a ref to read .codeturtle.yml from
     const mrLike: MrInfo = {
-      sourceBranch: branch, targetBranch: "", headSha,
+      sourceBranch: branch,
+      targetBranch: "",
+      headSha,
       diffRefs: { head_sha: headSha, base_sha: baseSha, start_sha: baseSha },
     };
-    const norms = await loadNorms(gl, projectId, mrLike, { forge, diffLines: countAddedLines(diffs) });
+    const norms = await loadNorms(gl, projectId, mrLike, {
+      forge,
+      diffLines: countAddedLines(diffs),
+    });
     const filtered = applyExcludes(diffs, norms);
     if (!filtered.length) {
       log(`branch=${branch} all changed files excluded by norms`);

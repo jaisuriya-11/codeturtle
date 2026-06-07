@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadCredentials, resetAll, setForge } from "../config.js";
 import {
-  completeDeviceFlow, DEFAULT_GITHUB_CLIENT_ID, ensureFreshGithubToken, getGithubClientId,
-  pollForToken, startDeviceFlow,
+  completeDeviceFlow,
+  DEFAULT_GITHUB_CLIENT_ID,
+  ensureFreshGithubToken,
+  getGithubClientId,
+  pollForToken,
+  startDeviceFlow,
 } from "../githubAuth.js";
 import { installFetch } from "./helpers/fetchMock.js";
 
@@ -32,19 +36,27 @@ describe("startDeviceFlow", () => {
   it("maps the device-code response", async () => {
     installFetch(() => ({
       json: {
-        device_code: "dev", user_code: "WXYZ-1234",
-        verification_uri: "https://github.com/login/device", interval: 5, expires_in: 900,
+        device_code: "dev",
+        user_code: "WXYZ-1234",
+        verification_uri: "https://github.com/login/device",
+        interval: 5,
+        expires_in: 900,
       },
     }));
     const r = await startDeviceFlow("cid");
     expect(r).toEqual({
-      deviceCode: "dev", userCode: "WXYZ-1234",
-      verificationUri: "https://github.com/login/device", interval: 5, expiresIn: 900,
+      deviceCode: "dev",
+      userCode: "WXYZ-1234",
+      verificationUri: "https://github.com/login/device",
+      interval: 5,
+      expiresIn: 900,
     });
   });
 
   it("throws when GitHub returns an error", async () => {
-    installFetch(() => ({ json: { error: "unauthorized_client", error_description: "bad client" } }));
+    installFetch(() => ({
+      json: { error: "unauthorized_client", error_description: "bad client" },
+    }));
     await expect(startDeviceFlow("cid")).rejects.toThrow(/bad client/);
   });
 });
@@ -52,17 +64,23 @@ describe("startDeviceFlow", () => {
 describe("completeDeviceFlow", () => {
   it("polls, fetches the username, and persists an oauth credential", async () => {
     vi.useFakeTimers();
-    installFetch((url) =>
-      url.includes("/login/oauth/access_token")
-        ? { json: { access_token: "ghu_tok", refresh_token: "ghr_tok", expires_in: 3600 } }
-        : { json: { login: "octocat" } }, // api.github.com/user
+    installFetch(
+      (url) =>
+        url.includes("/login/oauth/access_token")
+          ? { json: { access_token: "ghu_tok", refresh_token: "ghr_tok", expires_in: 3600 } }
+          : { json: { login: "octocat" } }, // api.github.com/user
     );
     const p = completeDeviceFlow("cid", "dev", 1);
     await vi.advanceTimersByTimeAsync(1000); // poll → token
     const user = await p;
     expect(user).toBe("octocat");
     const stored = loadCredentials().github;
-    expect(stored).toMatchObject({ token: "ghu_tok", method: "oauth", user: "octocat", client_id: "cid" });
+    expect(stored).toMatchObject({
+      token: "ghu_tok",
+      method: "oauth",
+      user: "octocat",
+      client_id: "cid",
+    });
   });
 });
 
@@ -105,7 +123,10 @@ describe("ensureFreshGithubToken", () => {
 
   it("does not refresh an oauth token that is not near expiry", async () => {
     setForge("github", {
-      token: "fresh", method: "oauth", refresh_token: "r", client_id: "c",
+      token: "fresh",
+      method: "oauth",
+      refresh_token: "r",
+      client_id: "c",
       expires_at: Date.now() + 60 * 60 * 1000,
     });
     const fetchMock = installFetch(() => ({ json: {} }));
@@ -115,7 +136,10 @@ describe("ensureFreshGithubToken", () => {
 
   it("refreshes and persists when the oauth token is expiring", async () => {
     setForge("github", {
-      token: "old", method: "oauth", refresh_token: "r", client_id: "c",
+      token: "old",
+      method: "oauth",
+      refresh_token: "r",
+      client_id: "c",
       expires_at: Date.now() - 1000, // already past
     });
     installFetch(() => ({
@@ -129,7 +153,10 @@ describe("ensureFreshGithubToken", () => {
 
   it("falls back to the old token when refresh fails", async () => {
     setForge("github", {
-      token: "old", method: "oauth", refresh_token: "r", client_id: "c",
+      token: "old",
+      method: "oauth",
+      refresh_token: "r",
+      client_id: "c",
       expires_at: Date.now() - 1000,
     });
     installFetch(() => ({ status: 401, json: { error: "bad_refresh" } }));

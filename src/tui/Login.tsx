@@ -21,9 +21,7 @@ type Step = "pick" | "githubKey" | "githubDevice" | "gitlabKey";
 
 function ghCliToken(): string | null {
   try {
-    const out = execFileSync("gh", ["auth", "token"], { timeout: 10000 })
-      .toString()
-      .trim();
+    const out = execFileSync("gh", ["auth", "token"], { timeout: 10000 }).toString().trim();
     return out || null;
   } catch {
     return null;
@@ -45,10 +43,7 @@ async function validateGithub(token: string): Promise<string | null> {
   }
 }
 
-async function validateGitlab(
-  url: string,
-  token: string,
-): Promise<string | null> {
+async function validateGitlab(url: string, token: string): Promise<string | null> {
   try {
     const r = await fetch(`${url}/api/v4/user`, {
       headers: { "PRIVATE-TOKEN": token },
@@ -157,10 +152,7 @@ export function Login({ onDone }: { onDone: () => void }) {
                 } else if (item.value === "gh") {
                   const token = ghCliToken();
                   if (token) void connectGithubToken(token);
-                  else
-                    setError(
-                      "No gh session found. Run `gh auth login` first, or paste a PAT.",
-                    );
+                  else setError("No gh session found. Run `gh auth login` first, or paste a PAT.");
                 } else if (item.value === "ghpat") {
                   setStep("githubKey");
                 } else if (item.value === "gitlab") {
@@ -203,9 +195,7 @@ export function Login({ onDone }: { onDone: () => void }) {
       {step === "githubKey" && (
         <Box flexDirection="column">
           <Text bold>GitHub token</Text>
-          <Text color={DIM}>
-            Create: https://github.com/settings/tokens (scope: repo)
-          </Text>
+          <Text color={DIM}>Create: https://github.com/settings/tokens (scope: repo)</Text>
           <Box>
             <Text color={ACCENT}>{"❯ "}</Text>
             <TextInput
@@ -222,8 +212,7 @@ export function Login({ onDone }: { onDone: () => void }) {
         <Box flexDirection="column">
           <Text bold>GitLab token</Text>
           <Text color={DIM}>
-            URL: {gitlabUrl} (set GITLAB_URL env for self-hosted) · create:{" "}
-            {gitlabUrl}
+            URL: {gitlabUrl} (set GITLAB_URL env for self-hosted) · create: {gitlabUrl}
             /-/user_settings/personal_access_tokens (scope: api)
           </Text>
           <Box>

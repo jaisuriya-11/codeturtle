@@ -18,8 +18,11 @@ const { getForgeClient } = await import("../forge.js");
 const { review } = await import("../reviewer.js");
 
 const diff: FileDiff = {
-  newPath: "a.ts", oldPath: "a.ts",
-  diff: "@@ -1,1 +1,2 @@\n ctx\n+added\n", newFile: false, deletedFile: false,
+  newPath: "a.ts",
+  oldPath: "a.ts",
+  diff: "@@ -1,1 +1,2 @@\n ctx\n+added\n",
+  newFile: false,
+  deletedFile: false,
 };
 
 let pid = 0;
@@ -42,7 +45,17 @@ describe("runReview", () => {
     const fake: FakeForge = makeFakeForge({ diffs: [diff] });
     ph.fake = fake;
     vi.mocked(review).mockResolvedValue({
-      findings: [{ file: "a.ts", line: 2, severity: "warning", category: "bug", confidence: 0.9, title: "t", comment: "c" }],
+      findings: [
+        {
+          file: "a.ts",
+          line: 2,
+          severity: "warning",
+          category: "bug",
+          confidence: 0.9,
+          title: "t",
+          comment: "c",
+        },
+      ],
       summary: "looks risky",
     });
 
@@ -75,7 +88,9 @@ describe("runReview", () => {
     vi.mocked(getForgeClient).mockRejectedValueOnce(new Error("token refresh failed"));
     const logs: string[] = [];
     await runReview(j, (m) => logs.push(m));
-    expect(logs.some((m) => m.includes("review failed") && m.includes("token refresh failed"))).toBe(true);
+    expect(
+      logs.some((m) => m.includes("review failed") && m.includes("token refresh failed")),
+    ).toBe(true);
     // lock must be free again — a second run reaches the forge stage
     ph.fake = makeFakeForge({ diffs: [] });
     const logs2: string[] = [];
@@ -88,7 +103,17 @@ describe("runReview", () => {
     const fake = makeFakeForge({ diffs: [diff] });
     ph.fake = fake;
     vi.mocked(review).mockResolvedValue({
-      findings: [{ file: "a.ts", line: 2, severity: "info", category: "style", confidence: 0.1, title: "t", comment: "c" }],
+      findings: [
+        {
+          file: "a.ts",
+          line: 2,
+          severity: "info",
+          category: "style",
+          confidence: 0.1,
+          title: "t",
+          comment: "c",
+        },
+      ],
       summary: "ok",
     });
     await runReview(job());

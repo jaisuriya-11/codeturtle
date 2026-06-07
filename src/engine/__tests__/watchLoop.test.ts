@@ -88,7 +88,11 @@ describe("watch loop", () => {
     });
     expect(pushJobs).toHaveLength(1);
     expect(pushJobs[0]).toMatchObject({
-      forge: "github", projectId: "o/r", branch: "feat", headSha: "s2", baseSha: "s1",
+      forge: "github",
+      projectId: "o/r",
+      branch: "feat",
+      headSha: "s2",
+      baseSha: "s1",
     });
     expect(wh.runPushReview).toHaveBeenCalledTimes(1);
   });

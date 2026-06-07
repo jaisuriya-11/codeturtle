@@ -42,9 +42,7 @@ export const DEFAULT_GITHUB_CLIENT_ID = "Iv23ctVK4tv3DELTC0JY";
  * the value stored alongside the github credential, then the baked-in default. */
 export function getGithubClientId(): string | undefined {
   return (
-    process.env.GITHUB_CLIENT_ID ??
-    loadCredentials().github?.client_id ??
-    DEFAULT_GITHUB_CLIENT_ID
+    process.env.GITHUB_CLIENT_ID ?? loadCredentials().github?.client_id ?? DEFAULT_GITHUB_CLIENT_ID
   );
 }
 

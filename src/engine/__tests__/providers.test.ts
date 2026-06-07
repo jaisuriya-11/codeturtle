@@ -9,7 +9,16 @@ describe("PROVIDERS registry", () => {
   it("includes the expected providers with required fields", () => {
     const ids = PROVIDERS.map((p) => p.id);
     expect(ids).toEqual(
-      expect.arrayContaining(["gemini", "anthropic", "openai", "openrouter", "groq", "ollama", "lmstudio", "custom"]),
+      expect.arrayContaining([
+        "gemini",
+        "anthropic",
+        "openai",
+        "openrouter",
+        "groq",
+        "ollama",
+        "lmstudio",
+        "custom",
+      ]),
     );
     for (const p of PROVIDERS) {
       expect(typeof p.id).toBe("string");
@@ -49,7 +58,12 @@ describe("detectLocalModels", () => {
   });
 
   it("returns null when the request throws (server unreachable)", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ECONNREFUSED"); }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("ECONNREFUSED");
+      }),
+    );
     expect(await detectLocalModels("http://localhost:9/v1")).toBeNull();
   });
 });

@@ -10,8 +10,16 @@ vi.mock("../forge.js", async (orig) => ({
   getForgeClient: vi.fn(async () => hf.fake),
 }));
 
-const { parseCommentToFinding, fetchPRReview, fetchCodeSnippet, fetchOpenPrs, fetchPrList, listRepos, mapGithubPr, mapGitlabMr } =
-  await import("../viewer.js");
+const {
+  parseCommentToFinding,
+  fetchPRReview,
+  fetchCodeSnippet,
+  fetchOpenPrs,
+  fetchPrList,
+  listRepos,
+  mapGithubPr,
+  mapGitlabMr,
+} = await import("../viewer.js");
 
 afterEach(() => {
   hf.fake = null;
@@ -86,7 +94,10 @@ describe("fetchCodeSnippet", () => {
 describe("fetchOpenPrs", () => {
   it("maps the forge's open PRs to iids", async () => {
     hf.fake = makeFakeForge();
-    hf.fake.listOpenPrs = vi.fn(async () => [{ iid: 3, headSha: "x" }, { iid: 4, headSha: "y" }]);
+    hf.fake.listOpenPrs = vi.fn(async () => [
+      { iid: 3, headSha: "x" },
+      { iid: 4, headSha: "y" },
+    ]);
     expect(await fetchOpenPrs("github", "o/r")).toEqual([{ iid: 3 }, { iid: 4 }]);
   });
 });
@@ -94,14 +105,26 @@ describe("fetchOpenPrs", () => {
 describe("PR summary mappers", () => {
   it("maps a GitHub PR", () => {
     expect(
-      mapGithubPr({ number: 7, title: "fix", state: "open", user: { login: "amy" }, updated_at: "2026-01-02" }),
+      mapGithubPr({
+        number: 7,
+        title: "fix",
+        state: "open",
+        user: { login: "amy" },
+        updated_at: "2026-01-02",
+      }),
     ).toEqual({ iid: 7, title: "fix", state: "open", author: "amy", updatedAt: "2026-01-02" });
     expect(mapGithubPr({ number: 8, state: "closed" }).state).toBe("closed");
   });
 
   it("maps a GitLab MR — merged counts as closed", () => {
     expect(
-      mapGitlabMr({ iid: 2, title: "feat", state: "opened", author: { username: "bo" }, updated_at: "2026-01-03" }),
+      mapGitlabMr({
+        iid: 2,
+        title: "feat",
+        state: "opened",
+        author: { username: "bo" },
+        updated_at: "2026-01-03",
+      }),
     ).toEqual({ iid: 2, title: "feat", state: "open", author: "bo", updatedAt: "2026-01-03" });
     expect(mapGitlabMr({ iid: 3, state: "merged" }).state).toBe("closed");
   });
@@ -111,7 +134,9 @@ describe("fetchPrList", () => {
   it("fetches GitHub PRs by state", async () => {
     const { calls } = installFetch((url) =>
       url.includes("/pulls")
-        ? { json: [{ number: 1, title: "a", state: "open", user: { login: "u" }, updated_at: "t" }] }
+        ? {
+            json: [{ number: 1, title: "a", state: "open", user: { login: "u" }, updated_at: "t" }],
+          }
         : { json: {} },
     );
     const prs = await fetchPrList("github", "o/r", "open");
@@ -142,7 +167,9 @@ describe("fetchPrList", () => {
 describe("listRepos", () => {
   it("lists GitHub repos by full name", async () => {
     installFetch((url) =>
-      url.includes("/user/repos") ? { json: [{ full_name: "o/r1" }, { full_name: "o/r2" }] } : { json: [] },
+      url.includes("/user/repos")
+        ? { json: [{ full_name: "o/r1" }, { full_name: "o/r2" }] }
+        : { json: [] },
     );
     expect(await listRepos("github")).toEqual(["o/r1", "o/r2"]);
   });

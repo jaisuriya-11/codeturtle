@@ -21,6 +21,7 @@ codeturtle          # opens the TUI — first run walks you through setup
 ```
 
 First run:
+
 1. **Pick a provider** — Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama (local), LM Studio (local), or any custom OpenAI-compatible endpoint. Local servers get live model detection.
 2. **Connect a forge (once)** — one menu: sign in with GitHub (OAuth device flow, set `GITHUB_CLIENT_ID`), use your `gh` CLI session, paste a GitHub PAT, or paste a GitLab token. One is enough; you can optionally connect another afterwards.
 3. **Pick repos to watch** — `github:owner/repo gitlab:12345`
@@ -68,8 +69,8 @@ reference, the TUI components, configuration, and the hard invariants. Start at
 [`docs/README.md`](docs/README.md).
 
 ## Demo
-<img width="1694" height="949" alt="Screenshot 2026-06-05 at 2 43 53 PM" src="https://github.com/user-attachments/assets/b79b48b4-b89a-497e-998f-01ae28caed5a" />
 
+<img width="1694" height="949" alt="Screenshot 2026-06-05 at 2 43 53 PM" src="https://github.com/user-attachments/assets/b79b48b4-b89a-497e-998f-01ae28caed5a" />
 
 ## Contributing
 
@@ -88,4 +89,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-

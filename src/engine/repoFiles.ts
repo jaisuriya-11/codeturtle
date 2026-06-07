@@ -41,7 +41,12 @@ export function resolveImport(spec: string, fromPath: string, lang: Lang): strin
     if (!spec.startsWith(".")) return [];
     const rel = spec.replace(/^\.+/, "").replace(/\./g, "/");
     const ups = spec.length - spec.replace(/^\.+/, "").length;
-    const up = ups > 1 ? Array(ups - 1).fill("..").join("/") : "";
+    const up =
+      ups > 1
+        ? Array(ups - 1)
+            .fill("..")
+            .join("/")
+        : "";
     const base = posix.normalize(posix.join(folder, up, rel));
     return [`${base}.py`, `${base}/__init__.py`];
   }
@@ -79,7 +84,8 @@ export function testCandidates(path: string, lang: Lang): string[] {
   const folder = posix.dirname(path);
   if (lang === "ts") {
     return [
-      `${base}.test${ext}`, `${base}.spec${ext}`,
+      `${base}.test${ext}`,
+      `${base}.spec${ext}`,
       posix.join(folder, "__tests__", `${name}.test${ext}`),
       posix.join(folder, "__tests__", `${name}${ext}`),
     ];

@@ -25,7 +25,7 @@ export function loadPacks(): Map<string, RawNorms> {
   const dir = normsDir();
   const packs = new Map<string, RawNorms>();
   if (!existsSync(dir)) return packs;
-  let entries: string[] = [];
+  let entries: string[];
   try {
     entries = readdirSync(dir);
   } catch {
@@ -61,7 +61,10 @@ export async function loadTransforms(active: string[]): Promise<NormPlugin[]> {
       const mod = (await import(pathToFileURL(file).href)) as { default?: Partial<NormPlugin> };
       const plugin = mod.default;
       if (plugin && typeof plugin.transform === "function") {
-        out.push({ name: typeof plugin.name === "string" ? plugin.name : name, transform: plugin.transform });
+        out.push({
+          name: typeof plugin.name === "string" ? plugin.name : name,
+          transform: plugin.transform,
+        });
       }
     } catch {
       // skip a broken transform — a bad plugin must not kill the review

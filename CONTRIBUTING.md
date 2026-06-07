@@ -14,10 +14,10 @@ Before you begin, please read this document and our [Code of Conduct](CODE_OF_CO
 
 Code Turtle is built with TypeScript, Node.js (ESM), and React/Ink. It is structured into distinct areas:
 
-*   `src/cli/`: The Commander-based command-line interface entry points.
-*   `src/engine/`: Core business logic (forge integrations, AI reviewer, context bundler, watch loop). **No UI imports allowed here.**
-*   `src/tui/`: React/Ink components for the TUI. **No business logic or API calls here.**
-*   `~/.codeturtle/`: User configuration and data directory.
+- `src/cli/`: The Commander-based command-line interface entry points.
+- `src/engine/`: Core business logic (forge integrations, AI reviewer, context bundler, watch loop). **No UI imports allowed here.**
+- `src/tui/`: React/Ink components for the TUI. **No business logic or API calls here.**
+- `~/.codeturtle/`: User configuration and data directory.
 
 Everything funnels through a single review entrypoint — `pipeline.runReview(job)` — which the
 CLI, the TUI paste box, and the watcher all call. See the
@@ -33,8 +33,8 @@ for AI agents) or the human-friendly [Engine Reference](docs/engine-reference.md
 
 ### Prerequisites
 
-*   Node.js (>= 18)
-*   npm (or your preferred package manager)
+- Node.js (>= 22.12)
+- npm (or your preferred package manager)
 
 ### Installation
 
@@ -48,18 +48,18 @@ for AI agents) or the human-friendly [Engine Reference](docs/engine-reference.md
 
 Code Turtle compiles from TypeScript to a single ESM bundle using `tsup`.
 
-*   **Build the project:**
-    ```bash
-    npm run build # runs tsup
-    ```
-*   **Run the compiled CLI:**
-    ```bash
-    node dist/cli.js status
-    ```
-*   **Run a review locally:**
-    ```bash
-    node dist/cli.js review <PR-link>
-    ```
+- **Build the project:**
+  ```bash
+  npm run build # runs tsup
+  ```
+- **Run the compiled CLI:**
+  ```bash
+  node dist/cli.js status
+  ```
+- **Run a review locally:**
+  ```bash
+  node dist/cli.js review <PR-link>
+  ```
 
 ### Testing locally with `npm link`
 
@@ -156,11 +156,11 @@ tests on every push/PR (`.github/workflows/ci.yml`).
 
 ### Please do NOT
 
-*   Run reviews against repos you weren't asked to — **reviews post real comments.**
-*   Commit, push, publish, or open PRs on someone's behalf without being asked.
-*   Store anything outside `~/.codeturtle/`, or weaken its 0600 perms.
-*   Re-introduce Python (v2.0 is intentionally TS-only), add webhooks/a server (local-first is the
-    core promise), or bump deps while fixing an unrelated bug.
+- Run reviews against repos you weren't asked to — **reviews post real comments.**
+- Commit, push, publish, or open PRs on someone's behalf without being asked.
+- Store anything outside `~/.codeturtle/`, or weaken its 0600 perms.
+- Re-introduce Python (v2.0 is intentionally TS-only), add webhooks/a server (local-first is the
+  core promise), or bump deps while fixing an unrelated bug.
 
 ---
 

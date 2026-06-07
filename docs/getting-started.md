@@ -6,7 +6,7 @@ This page gets you from a fresh clone to a working review.
 
 ## Prerequisites
 
-- **Node.js ≥ 18** (the build targets `node18`; native `fetch` and `AbortSignal.timeout` are used)
+- **Node.js ≥ 22.12** (floor set by `commander@15`/`ink@7`; native `fetch` and `AbortSignal.timeout` are used)
 - A package manager (`npm`)
 - An API key for at least one LLM provider, **or** a local server (Ollama / LM Studio)
 - A GitHub and/or GitLab token (or a logged-in `gh` CLI session)
@@ -98,6 +98,7 @@ Running `codeturtle` with no config launches the [`Setup`](./tui-reference.md#se
    - **GitLab token** (scope: `api`; set `GITLAB_URL` for self-hosted).
 
    You only need **one** of these. GitHub uses the **MCP** backend by default.
+
 3. **Pick a repo to watch** — for a GitHub connection, choose one (stored as `github:owner/repo`).
 4. **Finish** — you land on a "connected" screen; press Enter to finish, or choose **Connect
    another forge** if you want both GitHub and GitLab.

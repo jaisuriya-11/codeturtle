@@ -5,9 +5,12 @@ import type { FileDiff, Norms } from "../types.js";
 import { makeFakeForge } from "./helpers/fakeForge.js";
 
 const norms: Norms = {
-  confidenceThreshold: 0.7, maxFindings: 25, exclude: [],
+  confidenceThreshold: 0.7,
+  maxFindings: 25,
+  exclude: [],
   categories: { security: true, bug: true, perf: true, style: true, maintainability: true },
-  guidelines: "", examples: [],
+  guidelines: "",
+  examples: [],
 };
 
 const changed = `import { helper } from "./util";
@@ -15,7 +18,13 @@ export function doThing() { return helper(); }
 `;
 
 const diffs: FileDiff[] = [
-  { newPath: "src/a.ts", oldPath: "src/a.ts", diff: "@@ -1,1 +1,2 @@", newFile: false, deletedFile: false },
+  {
+    newPath: "src/a.ts",
+    oldPath: "src/a.ts",
+    diff: "@@ -1,1 +1,2 @@",
+    newFile: false,
+    deletedFile: false,
+  },
 ];
 
 describe("buildContext", () => {
@@ -53,7 +62,13 @@ describe("buildContext", () => {
     const gl = makeFakeForge({ files: {} }); // getFile returns null for everything
     const d: FileDiff[] = [
       { newPath: "gone.ts", oldPath: "gone.ts", diff: "", newFile: false, deletedFile: true },
-      { newPath: "missing.ts", oldPath: "missing.ts", diff: "", newFile: false, deletedFile: false },
+      {
+        newPath: "missing.ts",
+        oldPath: "missing.ts",
+        diff: "",
+        newFile: false,
+        deletedFile: false,
+      },
     ];
     const bundle = await buildContext(gl, "o/r", "head", d, norms);
     expect(bundle.files).toHaveLength(0);
