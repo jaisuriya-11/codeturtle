@@ -103,6 +103,9 @@ export async function finalize(
   let maxSev: Severity | null = null;
   let posted = 0;
   for (const f of kept) {
+    // severity counts every kept finding (not just newly posted ones) so the
+    // label reflects the full review even when dedup skips the comments
+    if (maxSev === null || RANK[f.severity] > RANK[maxSev]) maxSev = f.severity;
     if (alreadyPosted(f.file, f.line)) continue;
     posted++;
     const ok = await gl.postInlineNote(
@@ -120,7 +123,6 @@ export async function finalize(
         `_(couldn't anchor inline — ${f.file}:${f.line})_\n\n${commentBody(f, botName)}`,
       );
     }
-    if (maxSev === null || RANK[f.severity] > RANK[maxSev]) maxSev = f.severity;
   }
 
   let summary: string;
@@ -143,27 +145,44 @@ export async function finalize(
     summary = `## ${botEmoji} ${botName}\n\n✅ No issues found above the confidence threshold.`;
   }
 
-  if (await gl.submitReview(projectId, prNumber, summary)) {
+  // "Re-review" = earlier finding markers exist on the PR.
+  const isReReview = existingMarkers.length > 0;
+
+  // A re-review that added nothing new must not repost an identical summary
+  // review (MCP can't edit reviews, so each submit is a new conversation
+  // entry) — the recheck note below covers it instead.
+  if (posted > 0 || !isReReview) {
+    if (await gl.submitReview(projectId, prNumber, summary)) {
+      await gl.editNote(
+        projectId,
+        prNumber,
+        statusId,
+        `${STATUS_MARKER}\n${botEmoji} Review complete — see the review summary below.`,
+      );
+    } else {
+      await gl.editNote(projectId, prNumber, statusId, `${STATUS_MARKER}\n${summary}`);
+    }
+  } else {
     await gl.editNote(
       projectId,
       prNumber,
       statusId,
-      `${STATUS_MARKER}\n${botEmoji} Review complete — see the review summary below.`,
+      `${STATUS_MARKER}\n${botEmoji} Re-checked — no new findings; the earlier review summary still applies.`,
     );
-  } else {
-    await gl.editNote(projectId, prNumber, statusId, `${STATUS_MARKER}\n${summary}`);
   }
 
-  if (kept.length && maxSev) {
-    await gl.addLabels(projectId, prNumber, [LABEL[maxSev]]);
-  } else if (!kept.length) {
-    await gl.addLabels(projectId, prNumber, ["code-turtle/clean"]);
+  // labels are mutually exclusive: one code-turtle/* label reflects the
+  // current state, stale ones (e.g. clean → critical) are removed
+  const allCtLabels = ["code-turtle/clean", ...Object.values(LABEL)];
+  const want = kept.length && maxSev ? LABEL[maxSev] : !kept.length ? "code-turtle/clean" : null;
+  if (want) {
+    await gl.addLabels(projectId, prNumber, [want]);
+    await gl.removeLabels(
+      projectId,
+      prNumber,
+      allCtLabels.filter((l) => l !== want),
+    );
   }
-
-  // A re-review that produced nothing new is otherwise silent (MCP can't edit;
-  // REST edits the old review in place) — say so in the conversation, once per
-  // head commit. "Re-review" = earlier finding markers exist on the PR.
-  const isReReview = existingMarkers.length > 0;
   if (
     isReReview &&
     posted === 0 &&

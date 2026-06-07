@@ -94,6 +94,66 @@ describe("finalize — recheck note", () => {
   });
 });
 
+describe("finalize — no duplicate summary, exclusive labels", () => {
+  const refs: DiffRefs = { head_sha: "sha2", base_sha: "b", start_sha: "b" };
+  const result: ReviewResult = { findings: [], summary: "issues found" };
+  const oldMarkerNote = { id: 1, body: "<!-- ct:f:a.ts:2 -->\nold finding" };
+
+  it("submits the summary review on a first review", async () => {
+    const gl = makeFakeForge();
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, result, [finding(2)], statusId);
+    expect(gl.submitted).toHaveLength(1);
+  });
+
+  it("skips the summary review when a re-review adds nothing new", async () => {
+    const gl = makeFakeForge({ notes: [oldMarkerNote] });
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    // kept finding dedups against the existing marker → posted=0
+    await finalize(gl, "o/r", 1, refs, result, [finding(2)], statusId);
+    expect(gl.submitted).toHaveLength(0);
+    const status = gl.edited.find((e) => e.body.includes("ct:status"));
+    expect(status?.body).toContain("earlier review summary still applies");
+  });
+
+  it("still submits a summary when a re-review finds something new", async () => {
+    const gl = makeFakeForge({ notes: [oldMarkerNote] });
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, result, [{ ...finding(2), file: "b.ts" }], statusId);
+    expect(gl.submitted).toHaveLength(1);
+  });
+
+  it("swaps clean → severity label when findings appear", async () => {
+    const gl = makeFakeForge();
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, result, [finding(2)], statusId);
+    expect(gl.labels).toContain("code-turtle/warning");
+    expect(gl.removedLabels).toContain("code-turtle/clean");
+    expect(gl.removedLabels).not.toContain("code-turtle/warning");
+  });
+
+  it("swaps severity → clean label on a clean review", async () => {
+    const gl = makeFakeForge();
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    await finalize(gl, "o/r", 1, refs, { findings: [], summary: "ok" }, [], statusId);
+    expect(gl.labels).toContain("code-turtle/clean");
+    expect(gl.removedLabels).toEqual(
+      expect.arrayContaining(["code-turtle/critical", "code-turtle/warning", "code-turtle/info"]),
+    );
+  });
+
+  it("labels by the severity of all kept findings, not just newly posted ones", async () => {
+    // existing marker covers the critical finding; only a new warning posts —
+    // the label must still say critical
+    const gl = makeFakeForge({ notes: [oldMarkerNote] });
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    const critical: Finding = { ...finding(2), severity: "critical" };
+    const newWarning: Finding = { ...finding(2), file: "b.ts" };
+    await finalize(gl, "o/r", 1, refs, result, [critical, newWarning], statusId);
+    expect(gl.labels).toContain("code-turtle/critical");
+  });
+});
+
 describe("finalizeCommit", () => {
   afterEach(() => vi.unstubAllGlobals());
   const result: ReviewResult = { findings: [], summary: "overall fine" };

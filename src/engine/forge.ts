@@ -48,6 +48,7 @@ export interface ForgeClient {
     refs: DiffRefs,
   ): Promise<boolean>;
   addLabels(projectId: string, prNumber: number, labels: string[]): Promise<void>;
+  removeLabels(projectId: string, prNumber: number, labels: string[]): Promise<void>;
   submitReview(projectId: string, prNumber: number, body: string): Promise<boolean>;
   listOpenPrs(projectId: string): Promise<{ iid: number; headSha: string }[]>;
 }
@@ -208,6 +209,14 @@ export class GitLabClient implements ForgeClient {
     });
   }
 
+  async removeLabels(projectId: string, prNumber: number, labels: string[]) {
+    await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}`, {
+      method: "PUT",
+      headers: { ...this.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ remove_labels: labels.join(",") }),
+    });
+  }
+
   async submitReview() {
     return false; // GitLab has no formal review object; poster falls back to sticky note
   }
@@ -357,6 +366,16 @@ export class GitHubRestClient implements ForgeClient {
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify({ labels }),
     });
+  }
+
+  async removeLabels(projectId: string, prNumber: number, labels: string[]) {
+    // 404 per label (not present) is fine — removal is best-effort
+    for (const l of labels) {
+      await http(
+        `${this.base}/repos/${projectId}/issues/${prNumber}/labels/${encodeURIComponent(l)}`,
+        { method: "DELETE", headers: this.headers },
+      );
+    }
   }
 
   async submitReview(projectId: string, prNumber: number, body: string): Promise<boolean> {
