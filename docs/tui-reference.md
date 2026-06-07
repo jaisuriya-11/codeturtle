@@ -38,9 +38,9 @@ connection you land on the `connected` hub. There is **no forced GitLab gate** �
 `model → github → … → gitlab` two-gate flow was the source of the "can't skip GitLab" bug.
 
 - **Model** — delegates to `<ModelPicker>`, writes the `reviewer` config section.
-- **Connect** — one menu listing every auth method: *Sign in with GitHub (OAuth)* (device flow;
-  needs `GITHUB_CLIENT_ID`), *gh CLI session* (`ghCliToken()`), *paste a GitHub PAT*, *connect
-  GitLab (token)*. The last item is context-aware: `Skip — set up later` when nothing is
+- **Connect** — one menu listing every auth method: _Sign in with GitHub (OAuth)_ (device flow;
+  needs `GITHUB_CLIENT_ID`), _gh CLI session_ (`ghCliToken()`), _paste a GitHub PAT_, _connect
+  GitLab (token)_. The last item is context-aware: `Skip — set up later` when nothing is
   connected yet, `← Back` once a forge is connected. GitHub tokens validate against `GET /user`
   (`backend: "mcp"`); GitLab against `{url}/api/v4/user` (`backend: "rest"`).
 - **GitHub repo** — fetches your repos (`/user/repos?sort=pushed`) and lets you pick one (or type
@@ -83,6 +83,11 @@ The main screen. Responsibilities:
   `pr=… found=… kept=…` / `review failed pr=…` log lines).
 - **Session selection** — on open, asks which configured repo to monitor for this session (or all,
   or a new one, or skip).
+- **Refresh** — both PR lists refetch in place (no loading wipe, selection kept):
+  automatically on the watch cadence (`watch.interval`, default 30s) so raised, closed and
+  merged PRs stay current without keypress, and instantly with `R` for the impatient path.
+  Auto-refresh failures are silent (the list keeps its last good state); manual `R` failures
+  land in the events feed.
 - **Overlays** (`Esc` opens settings): change model (`<ModelPicker>`), manage repos
   (`<RepoPicker>`), reset all config (with a red confirm), or quit. All abort the watcher on exit.
 
