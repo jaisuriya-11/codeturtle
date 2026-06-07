@@ -38,17 +38,17 @@ It's not another SaaS bot. It's a single binary you install once, point at the m
 
 ## Why Code Turtle?
 
-| Aspect              | SaaS code-review bots              | Code Turtle                                              |
-| ------------------- | ---------------------------------- | -------------------------------------------------------- |
-| Where it runs       | Vendor cloud                       | Your machine — local-first                               |
-| Where code goes     | Uploaded to a third party          | Never leaves your laptop                                 |
-| Model choice        | Locked to vendor's model           | Any OpenAI-compatible endpoint (cloud or local)          |
-| Forge support       | GitHub only, usually               | GitHub & GitLab, first-class                             |
-| Auth                | OAuth + webhook install            | OAuth / `gh` CLI / PAT / GitHub App / GitLab token       |
-| Posting backend     | Vendor proxy                       | GitHub's official MCP server (default) or REST fallback  |
-| Offline capable     | No                                 | Yes — fully usable with Ollama or LM Studio              |
-| Custom review rules | Vendor UI                          | Drop-in `.codeturtle.yml` + global norm packs            |
-| Cost model          | Per-seat subscription               | Pay only for the model calls you make                    |
+| Aspect              | SaaS code-review bots     | Code Turtle                                             |
+| ------------------- | ------------------------- | ------------------------------------------------------- |
+| Where it runs       | Vendor cloud              | Your machine — local-first                              |
+| Where code goes     | Uploaded to a third party | Never leaves your laptop                                |
+| Model choice        | Locked to vendor's model  | Any OpenAI-compatible endpoint (cloud or local)         |
+| Forge support       | GitHub only, usually      | GitHub & GitLab, first-class                            |
+| Auth                | OAuth + webhook install   | OAuth / `gh` CLI / PAT / GitHub App / GitLab token      |
+| Posting backend     | Vendor proxy              | GitHub's official MCP server (default) or REST fallback |
+| Offline capable     | No                        | Yes — fully usable with Ollama or LM Studio             |
+| Custom review rules | Vendor UI                 | Drop-in `.codeturtle.yml` + global norm packs           |
+| Cost model          | Per-seat subscription     | Pay only for the model calls you make                   |
 
 ---
 
@@ -182,16 +182,16 @@ Layered norms resolve as: `defaults ← global config & packs ← target repo's 
 
 Full developer docs live in [`docs/`](docs/README.md) — architecture, a per-module engine reference, the TUI components, configuration, and the hard invariants. Start at [`docs/README.md`](docs/README.md).
 
-| #   | Doc                                       | What you'll learn                                                     |
-| --- | ----------------------------------------- | --------------------------------------------------------------------- |
-| 1   | [Getting Started](docs/getting-started.md)   | Install, build, run, and do your first review                         |
-| 2   | [Architecture](docs/architecture.md)         | The big picture: layers, modules, and the review data flow            |
-| 3   | [Engine Reference](docs/engine-reference.md) | Every module in `src/engine/` — what it does and its public surface   |
-| 4   | [TUI Reference](docs/tui-reference.md)       | The React + Ink components in `src/tui/`                              |
-| 5   | [Configuration](docs/configuration.md)       | `~/.codeturtle` store, env vars, and per-repo `.codeturtle.yml` norms |
-| 6   | [Hard Invariants](docs/invariants.md)        | The seven rules you must not break — security, idempotency, locking   |
-| 7   | [Custom Norms Guide](docs/custom-norms-guide.md) | Build your own review rules and norm packs                         |
-| 8   | [Glossary](docs/glossary.md)                 | Domain terms: forge, norms, finding, context bundle, marker           |
+| #   | Doc                                              | What you'll learn                                                     |
+| --- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| 1   | [Getting Started](docs/getting-started.md)       | Install, build, run, and do your first review                         |
+| 2   | [Architecture](docs/architecture.md)             | The big picture: layers, modules, and the review data flow            |
+| 3   | [Engine Reference](docs/engine-reference.md)     | Every module in `src/engine/` — what it does and its public surface   |
+| 4   | [TUI Reference](docs/tui-reference.md)           | The React + Ink components in `src/tui/`                              |
+| 5   | [Configuration](docs/configuration.md)           | `~/.codeturtle` store, env vars, and per-repo `.codeturtle.yml` norms |
+| 6   | [Hard Invariants](docs/invariants.md)            | The seven rules you must not break — security, idempotency, locking   |
+| 7   | [Custom Norms Guide](docs/custom-norms-guide.md) | Build your own review rules and norm packs                            |
+| 8   | [Glossary](docs/glossary.md)                     | Domain terms: forge, norms, finding, context bundle, marker           |
 
 ---
 
@@ -227,9 +227,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 
 ## Project Status
 
-| Version | Status    | Description                                                                                       |
-| ------- | --------- | ------------------------------------------------------------------------------------------------- |
-| v2.0.0  | Stable    | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes. |
+| Version    | Status      | Description                                                                                                                                                                                                         |
+| ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.0.0     | Stable      | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes.           |
 | Unreleased | In progress | ESLint + Prettier with CI enforcement · npm publish via Trusted Publisher (OIDC, automatic provenance) · Node 22/24 CI matrix · Dashboard PR auto-refresh · GitHub App sign-in (reviews post as `<app-slug>[bot]`). |
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
