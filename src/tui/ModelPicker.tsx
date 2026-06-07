@@ -189,7 +189,7 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
         <Text bold>Token limit per review</Text>
         <Text color={DIM}>
           max input tokens (diff + codebase context) sent to the model per review — press enter for{" "}
-          {DEFAULT_TOKEN_LIMIT}
+          {DEFAULT_TOKEN_LIMIT}, or type {'"none"'} for no limit
         </Text>
         <Box>
           <Text color={ACCENT}>{"❯ "}</Text>
@@ -197,8 +197,10 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
             value={tokenInput}
             onChange={setTokenInput}
             onSubmit={(v) => {
-              const n = Number(v.trim());
-              done(v.trim() && Number.isFinite(n) && n > 0 ? Math.trunc(n) : DEFAULT_TOKEN_LIMIT);
+              const t = v.trim().toLowerCase();
+              if (t === "none" || t === "0") return done(0);
+              const n = Number(t);
+              done(t && Number.isFinite(n) && n > 0 ? Math.trunc(n) : DEFAULT_TOKEN_LIMIT);
             }}
           />
         </Box>

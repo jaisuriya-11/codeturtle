@@ -68,8 +68,9 @@ export function SettingsOverlay({
         <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
           <Text bold>Token limit per review</Text>
           <Text color={DIM}>
-            max input tokens (diff + codebase context) per review — current {tokenLimit}, press
-            enter to keep
+            max input tokens (diff + codebase context) per review — current{" "}
+            {tokenLimit === 0 ? "no limit" : tokenLimit}, press enter to keep, {'"none"'} for no
+            limit
           </Text>
           <Box>
             <Text color={ACCENT}>{"❯ "}</Text>
@@ -77,8 +78,10 @@ export function SettingsOverlay({
               value={tokenInput}
               onChange={setTokenInput}
               onSubmit={(v) => {
-                const n = Number(v.trim());
-                if (v.trim() && Number.isFinite(n) && n > 0) onSetTokenLimit(Math.trunc(n));
+                const t = v.trim().toLowerCase();
+                const n = Number(t);
+                if (t === "none" || t === "0") onSetTokenLimit(0);
+                else if (t && Number.isFinite(n) && n > 0) onSetTokenLimit(Math.trunc(n));
                 setTokenInput("");
                 onNavigate("general");
               }}
@@ -103,7 +106,10 @@ export function SettingsOverlay({
                 label: `Review passes  (${passes} — ${passes === 1 ? "fast" : "thorough"})`,
                 value: "passes",
               },
-              { label: `Token limit  (${tokenLimit} tokens/review)`, value: "tokenLimit" },
+              {
+                label: `Token limit  (${tokenLimit === 0 ? "no limit" : `${tokenLimit} tokens/review`})`,
+                value: "tokenLimit",
+              },
               { label: `Auto-review repos  (${targets.length} watched)`, value: "repos" },
             ]}
             onSelect={(item) => {

@@ -178,6 +178,14 @@ describe("review token limit & limits", () => {
     process.env.REVIEWER_TOKEN_LIMIT = "not-a-number";
     expect(reviewTokenLimit()).toBe(DEFAULT_TOKEN_LIMIT);
   });
+  it("treats 0 as no limit: char caps disabled, file cap kept", () => {
+    updateConfig("reviewer", { token_limit: 0 });
+    expect(reviewTokenLimit()).toBe(0);
+    const l = reviewLimits();
+    expect(l.maxDiffChars).toBe(Number.POSITIVE_INFINITY);
+    expect(l.maxContextChars).toBe(Number.POSITIVE_INFINITY);
+    expect(l.maxContextFiles).toBe(12);
+  });
 });
 
 describe("hasForgeCredentials", () => {
