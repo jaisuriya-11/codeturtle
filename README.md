@@ -5,22 +5,92 @@
 <h1 align="center">Code Turtle</h1>
 
 <p align="center">
-  Local AI code reviewer for GitHub & GitLab. Any model — cloud or local. No server, no webhooks, no cloud.
+  <strong>Local AI code reviewer for GitHub &amp; GitLab — any model, no cloud.</strong><br />
+  Review pull requests with Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama, LM Studio, or any OpenAI-compatible endpoint. Everything runs on your machine. No server, no webhooks, no cloud.
 </p>
 
-## Install
+<p align="center">
+  <a href="https://www.npmjs.com/package/code-turtle"><img src="https://img.shields.io/npm/v/code-turtle.svg?style=for-the-badge&logo=npm&logoColor=white" alt="npm version" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jaisuriya97/turtle-code.svg?style=for-the-badge" alt="License" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code"><img src="https://img.shields.io/badge/node-%3E%3D22.12-339933.svg?style=for-the-badge&logo=node.js&logoColor=white" alt="Node Engine" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge" alt="PRs welcome" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code/actions"><img src="https://img.shields.io/badge/CI-passing-2088FF.svg?style=for-the-badge&logo=github-actions&logoColor=white" alt="CI" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jaisuriya97/turtle-code/stargazers"><img src="https://img.shields.io/github/stars/jaisuriya97/turtle-code.svg?style=flat-square" alt="Stars" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code/network/members"><img src="https://img.shields.io/github/forks/jaisuriya97/turtle-code.svg?style=flat-square" alt="Forks" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code/issues"><img src="https://img.shields.io/github/issues/jaisuriya97/turtle-code.svg?style=flat-square" alt="Issues" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/keep--a--changelog-1.1.0-FF69B4.svg?style=flat-square" alt="Changelog" /></a>
+  <a href="https://github.com/jaisuriya97/turtle-code"><img src="https://img.shields.io/badge/local--first-100%25-6A1B9A.svg?style=flat-square" alt="Local-first" /></a>
+</p>
+
+---
+
+## What is Code Turtle?
+
+**Code Turtle** (`codeturtle`) is an npm-distributed CLI/TUI that reviews GitHub PRs and GitLab MRs with any OpenAI-compatible LLM — cloud or local. There is **no server and no webhooks**: reviews run entirely on the user's machine, triggered by pasting a PR link in the TUI or by polling watched repos.
+
+It's not another SaaS bot. It's a single binary you install once, point at the model of your choice, and let it watch your repos. Findings land as inline comments plus a single summary review on the PR, deduped across runs so re-reviews only post what changed.
+
+---
+
+## Why Code Turtle?
+
+| Aspect              | SaaS code-review bots              | Code Turtle                                              |
+| ------------------- | ---------------------------------- | -------------------------------------------------------- |
+| Where it runs       | Vendor cloud                       | Your machine — local-first                               |
+| Where code goes     | Uploaded to a third party          | Never leaves your laptop                                 |
+| Model choice        | Locked to vendor's model           | Any OpenAI-compatible endpoint (cloud or local)          |
+| Forge support       | GitHub only, usually               | GitHub & GitLab, first-class                             |
+| Auth                | OAuth + webhook install            | OAuth / `gh` CLI / PAT / GitHub App / GitLab token       |
+| Posting backend     | Vendor proxy                       | GitHub's official MCP server (default) or REST fallback  |
+| Offline capable     | No                                 | Yes — fully usable with Ollama or LM Studio              |
+| Custom review rules | Vendor UI                          | Drop-in `.codeturtle.yml` + global norm packs            |
+| Cost model          | Per-seat subscription               | Pay only for the model calls you make                    |
+
+---
+
+## Key Features
+
+- **Multi-provider out of the box** — Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama, LM Studio, or any custom OpenAI-compatible endpoint. Local servers get live model detection.
+- **GitHub + GitLab, first-class** — GitHub I/O goes through the official GitHub remote MCP server; GitLab I/O is REST v4. Both have soft-fail and lock-aware pipelines.
+- **Smart context, not just diffs** — pulls changed files, their imports, callers, and tests from the repo at the head commit, ranked and budgeted.
+- **One native review per run** — inline comments + a single summary review (create → add → submit pending), with labels and dedup via hidden HTML markers.
+- **Idempotent re-reviews** — pushes only post new findings; markers carry a `±3 line tolerance` for LLM anchor jitter.
+- **Idempotent push reviews** — the same marker scheme works for commit comments on plain branch pushes, deduped per head commit.
+- **Custom norms** — drop a `.codeturtle.yml` in the target repo to tune guidelines, excludes, and confidence threshold. Reviewer/key overrides from repo files are **ignored for security**.
+- **GitHub App identity** — reviews can post as `<app-slug>[bot]` (RS256 JWT → installation token, all on your machine). Still no server.
+- **Watch + dashboard** — pick repos, get a live TUI: open/closed PR tabs, auto-watch, events feed, manual refresh.
+- **Daemon mode** — `codeturtle start` survives terminal close; `logs -f`, `status`, `stop` included.
+- **Strict reviewer validation** — hostile LLM output is filtered, not trusted; findings below the configured confidence threshold are dropped before posting.
+
+---
+
+## Installation
 
 ```bash
 npm install -g code-turtle
 ```
 
-## Use
+Or run without installing:
+
+```bash
+npx code-turtle
+```
+
+> Requires **Node.js ≥ 22.12** (the floor set by `commander@15` and `ink@7`).
+
+---
+
+## Quick Start
 
 ```bash
 codeturtle          # opens the TUI — first run walks you through setup
 ```
 
-First run:
+**First run walks you through three steps:**
 
 1. **Pick a provider** — Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama (local), LM Studio (local), or any custom OpenAI-compatible endpoint. Local servers get live model detection.
 2. **Connect a forge (once)** — one menu: sign in with GitHub (OAuth device flow, set `GITHUB_CLIENT_ID`), use your `gh` CLI session, paste a GitHub PAT, or paste a GitLab token. One is enough; you can optionally connect another afterwards.
@@ -41,7 +111,11 @@ Then the dashboard watches your repos: every new PR and every push gets reviewed
 w pause watcher · m model · s setup · q quit
 ```
 
-## Scripting / daemon
+**TUI key hints:** `w` pause watcher · `m` model · `s` setup · `q` quit
+
+---
+
+## Scripting / Daemon
 
 ```bash
 codeturtle review --forge github --repo owner/repo --pr 42   # one-off review
@@ -51,6 +125,8 @@ codeturtle stop
 codeturtle status
 ```
 
+---
+
 ## How it reviews
 
 - **Smart context**: not just the diff — pulls changed files, their imports, callers, and tests from the repo at the head commit
@@ -58,19 +134,72 @@ codeturtle status
 - **Custom norms**: drop a `.codeturtle.yml` in the target repo to tune guidelines, excludes, confidence threshold (reviewer/key overrides from repo files are ignored for security)
 - **Idempotent**: re-reviews after a push only post new findings (±3 line tolerance for anchor jitter)
 
-## Config
+---
+
+## Configuration
 
 Everything lives in `~/.codeturtle/` — `credentials.json`, `config.json`, `watcher.log`. Env vars (`GITHUB_TOKEN`, `GITLAB_TOKEN`, `REVIEWER_API_KEY`, `REVIEWER_BASE_URL`, `REVIEWER_MODEL`) override the store.
 
+Files in `~/.codeturtle/` are written with `chmod 600`. Secrets are never logged, never echoed in errors, and never written outside that directory.
+
+---
+
+## Architecture
+
+The data flow is the same whether the trigger is a pasted PR link, the CLI, or the polling watcher — everything funnels through one entrypoint.
+
+```
+  cli / tui  ──►  pipeline.runReview(job)  ──►  forge client  (GitHub MCP / GitLab REST)
+                          │                            │
+                          │                            ├─ getMr / getDiffs / getFile
+                          ▼                            │
+                      bundler  ◄───────────────────────┘   (changed files + imports + callers + tests)
+                          │
+                          ▼
+                      reviewer  ──►  LLM (OpenAI-compatible)  ──►  strict-validated findings
+                          │
+                          ▼
+                       poster   ──►  inline comments + one summary review + labels
+```
+
+Layered norms resolve as: `defaults ← global config & packs ← target repo's .codeturtle.yml` (project wins on conflict). Repo files can never redirect the reviewer or set keys — `agent` and `key_ref` are stripped before merge.
+
+---
+
+## Project Facts
+
+- **Language:** TypeScript (strict), ESM only, Node ≥ 22.12
+- **TUI:** React + [Ink](https://github.com/vadimdemedes/ink)
+- **GitHub I/O:** official GitHub remote MCP server (default) — REST fallback available
+- **GitLab I/O:** REST v4
+- **LLM:** the `openai` SDK pointed at any compatible base URL
+- **Build:** [`tsup`](https://tsup.egoist.dev/) → `dist/cli.js` (single bin)
+- **Tests:** [Vitest](https://vitest.dev) — specs co-located in `src/**/__tests__/`, invariants locked in `invariants.test.ts`, coverage enforced in CI
+
+---
+
 ## Documentation
 
-Full developer docs live in [`docs/`](docs/README.md) — architecture, a per-module engine
-reference, the TUI components, configuration, and the hard invariants. Start at
-[`docs/README.md`](docs/README.md).
+Full developer docs live in [`docs/`](docs/README.md) — architecture, a per-module engine reference, the TUI components, configuration, and the hard invariants. Start at [`docs/README.md`](docs/README.md).
+
+| #   | Doc                                       | What you'll learn                                                     |
+| --- | ----------------------------------------- | --------------------------------------------------------------------- |
+| 1   | [Getting Started](docs/getting-started.md)   | Install, build, run, and do your first review                         |
+| 2   | [Architecture](docs/architecture.md)         | The big picture: layers, modules, and the review data flow            |
+| 3   | [Engine Reference](docs/engine-reference.md) | Every module in `src/engine/` — what it does and its public surface   |
+| 4   | [TUI Reference](docs/tui-reference.md)       | The React + Ink components in `src/tui/`                              |
+| 5   | [Configuration](docs/configuration.md)       | `~/.codeturtle` store, env vars, and per-repo `.codeturtle.yml` norms |
+| 6   | [Hard Invariants](docs/invariants.md)        | The seven rules you must not break — security, idempotency, locking   |
+| 7   | [Custom Norms Guide](docs/custom-norms-guide.md) | Build your own review rules and norm packs                         |
+| 8   | [Glossary](docs/glossary.md)                 | Domain terms: forge, norms, finding, context bundle, marker           |
+
+---
 
 ## Demo
 
-<img width="1694" height="949" alt="Screenshot 2026-06-05 at 2 43 53 PM" src="https://github.com/user-attachments/assets/b79b48b4-b89a-497e-998f-01ae28caed5a" />
+<img width="1694" height="949" alt="Code Turtle dashboard" src="https://github.com/user-attachments/assets/b79b48b4-b89a-497e-998f-01ae28caed5a" />
+
+---
 
 ## Contributing
 
@@ -86,6 +215,29 @@ npm unlink -g code-turtle   # undo when done
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/getting-started.md](docs/getting-started.md#test-locally-with-npm-link) for full details.
 
+**Good first contributions:**
+
+- Adding a new LLM provider preset in `src/engine/providers.ts`
+- Adding a new norm pack under `docs/`
+- Improving TUI key hints or status badges
+- Writing missing tests in `src/**/__tests__/`
+- Documentation fixes
+
+---
+
+## Project Status
+
+| Version | Status    | Description                                                                                       |
+| ------- | --------- | ------------------------------------------------------------------------------------------------- |
+| v2.0.0  | Stable    | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes. |
+| Unreleased | In progress | ESLint + Prettier with CI enforcement · npm publish via Trusted Publisher (OIDC, automatic provenance) · Node 22/24 CI matrix · Dashboard PR auto-refresh · GitHub App sign-in (reviews post as `<app-slug>[bot]`). |
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
+---
+
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+</content>
+</invoke>
