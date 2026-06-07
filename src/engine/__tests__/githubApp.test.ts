@@ -93,7 +93,20 @@ describe("connectGithubApp", () => {
 
     expect(existsSync(GITHUB_APP_KEY_PATH)).toBe(true);
     expect(readFileSync(GITHUB_APP_KEY_PATH, "utf8")).toBe(PEM);
-    expect(statSync(GITHUB_APP_KEY_PATH).mode & 0o777).toBe(0o600);
+
+    // POSIX: chmodSync(0o600) sets owner-rw-only and the bits are observable.
+    // Windows (NTFS) has no POSIX mode bits — chmodSync is a no-op and
+    // statSync always reports 0o666. The key is still protected by NTFS ACLs
+    // and lives under the user's home directory.
+    if (process.platform !== "win32") {
+      expect(statSync(GITHUB_APP_KEY_PATH).mode & 0o777).toBe(0o600);
+    } else {
+      // On Windows we verify the chmod call is a safe no-op: it doesn't throw,
+      // the file stays writable (so re-mint works), and the default NTFS
+      // 0o666 mode is reported. Protection here is by the home dir's ACLs.
+      expect(() => statSync(GITHUB_APP_KEY_PATH)).not.toThrow();
+      expect(statSync(GITHUB_APP_KEY_PATH).mode & 0o777).toBe(0o666);
+    }
 
     const cred = loadCredentials().github!;
     expect(cred.method).toBe("app");
@@ -103,6 +116,21 @@ describe("connectGithubApp", () => {
     expect(cred.token).toBe("ghs_abc");
     expect(cred.expires_at).toBe(Date.parse("2099-01-01T00:00:00Z"));
   });
+
+  // Windows-only: confirm chmodSync doesn't throw and leaves the file writable
+  // so the refresh-before-use path can re-write the key if needed.
+  it.runIf(process.platform === "win32")(
+    "windows: chmodSync is a no-op but the key file stays accessible",
+    async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        jsonResponse({ token: "ghs_win", expires_at: "2099-01-01T00:00:00Z" }, 201),
+      );
+      await connectGithubApp("12345", PEM, { id: 7, account: "jaisuriya97" }, "code-turtle");
+      const st = statSync(GITHUB_APP_KEY_PATH);
+      expect(st.mode & 0o777).toBe(0o666);
+      expect(readFileSync(GITHUB_APP_KEY_PATH, "utf8")).toBe(PEM);
+    },
+  );
 });
 
 describe("ensureFreshAppToken", () => {
