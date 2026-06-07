@@ -46,7 +46,10 @@ describe("applyExcludes", () => {
       { newPath: "package-lock.json", oldPath: "", diff: "", newFile: true, deletedFile: false },
       { newPath: "dist/x.js", oldPath: "", diff: "", newFile: true, deletedFile: false },
     ];
-    const kept = applyExcludes(diffs, { ...baseNorms, exclude: ["**/dist/**", "package-lock.json"] });
+    const kept = applyExcludes(diffs, {
+      ...baseNorms,
+      exclude: ["**/dist/**", "package-lock.json"],
+    });
     expect(kept.map((d) => d.newPath)).toEqual(["src/a.ts"]);
   });
 });

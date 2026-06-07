@@ -10,7 +10,8 @@ Read this fully before changing anything.
 with any OpenAI-compatible LLM (cloud or local). No server, no webhooks: reviews run on the
 user's machine, triggered by pasting a PR link in the TUI or by polling watched repos.
 
-- Language: TypeScript (strict), ESM only, Node ≥ 18
+- Language: TypeScript (strict), ESM only, Node ≥ 22.12 (floor set by `commander@15`/`ink@7`)
+- Lint/format: ESLint (flat config, typescript-eslint + react-hooks) + Prettier — both CI-enforced
 - TUI: React + Ink
 - GitHub I/O: official GitHub remote MCP server (`@modelcontextprotocol/sdk`)
 - GitLab I/O: REST v4
@@ -45,7 +46,8 @@ src/
     ├── App.tsx           router: login → model (once) → repo → dashboard
     ├── Login.tsx         sign in: GitHub OAuth / gh CLI / PAT, GitLab PAT
     ├── RepoScreen.tsx    pick the session repo the dashboard works on
-    ├── Dashboard.tsx     open/closed PR tabs, auto-watch, events feed, settings
+    ├── Dashboard.tsx     open/closed PR tabs, auto-watch, events feed; owns all dashboard state
+    ├── dashboard/        presentational pieces: PrList (viewport+status badges), SettingsOverlay
     ├── ReviewViewer.tsx  posted review browser: findings, code context, file filter
     ├── ModelPicker.tsx   provider → model → key (opencode-style)
     ├── RepoPicker.tsx    pick extra repos to auto-review from live forge list
@@ -96,7 +98,7 @@ Data flow: `cli|tui → pipeline.runReview(job)|runPushReview(job) → forge cli
   failed and release the lock in `finally`. Never let one PR's failure kill the watcher.
 - Network: native `fetch` with `AbortSignal.timeout(...)`. No axios/got/etc.
 - New dependencies need a strong reason — the install is `npm i -g`, keep it lean.
-- Naming/style: match neighbouring code. Comments explain *why*, not *what*. No decorative
+- Naming/style: match neighbouring code. Comments explain _why_, not _what_. No decorative
   comment banners beyond the existing file-header pattern.
 - User-facing TUI text: short, lowercase-ish, no exclamation marks. Colors only via
   `theme.tsx` ACCENT/DIM. Logo is the ASCII block in `theme.tsx` — no emoji in the header.
@@ -105,14 +107,19 @@ Data flow: `cli|tui → pipeline.runReview(job)|runPushReview(job) → forge cli
 
 ```bash
 npm run typecheck    # tsc --noEmit — must be clean (covers src + co-located tests)
+npm run lint         # ESLint — must be clean
+npm run format:check # Prettier — must be clean (`npm run format` to fix)
 npm test             # Vitest — must pass
-npx tsup             # must build
+npm run build        # tsup — must build
 node dist/cli.js status
 node dist/cli.js review <a-real-PR-link>   # only with user consent — posts real comments
 ```
 
+`npm run verify` chains typecheck + lint + format:check + test.
+
 When you change engine logic or touch a hard invariant, add or update the matching test under
-`src/**/__tests__/`. CI (`.github/workflows/ci.yml`) runs typecheck + build + tests on every push/PR.
+`src/**/__tests__/`. CI (`.github/workflows/ci.yml`) runs lint + format + typecheck + build +
+tests on Node 22/24 for every push/PR; `release.yml` publishes to npm on `v*` tags.
 
 TUI can't run in non-TTY contexts; smoke-test components headlessly with
 `ink-testing-library` (`render(...)` → `lastFrame()`), via a throwaway `src/tui-smoke.tsx`

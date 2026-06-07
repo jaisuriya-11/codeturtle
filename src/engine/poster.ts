@@ -3,7 +3,11 @@
 
 import { reviewerSettings } from "./config.js";
 import {
-  findingMarker, recheckMarker, REVIEW_MARKER, STATUS_MARKER, type ForgeClient,
+  findingMarker,
+  recheckMarker,
+  REVIEW_MARKER,
+  STATUS_MARKER,
+  type ForgeClient,
 } from "./forge.js";
 import { listCommitCommentBodies, postCommitComment } from "./forgeCommits.js";
 import type { DiffRefs, FileDiff, Finding, Forge, ReviewResult, Severity } from "./types.js";
@@ -78,8 +82,13 @@ function commentBody(f: Finding, botName: string): string {
 }
 
 export async function finalize(
-  gl: ForgeClient, projectId: string, prNumber: number, refs: DiffRefs,
-  result: ReviewResult, kept: Finding[], statusId: number | string,
+  gl: ForgeClient,
+  projectId: string,
+  prNumber: number,
+  refs: DiffRefs,
+  result: ReviewResult,
+  kept: Finding[],
+  statusId: number | string,
   log: (msg: string) => void = () => {},
 ): Promise<void> {
   const botName = reviewerSettings().botName;
@@ -96,10 +105,18 @@ export async function finalize(
   for (const f of kept) {
     if (alreadyPosted(f.file, f.line)) continue;
     posted++;
-    const ok = await gl.postInlineNote(projectId, prNumber, f.file, f.line, commentBody(f, botName), refs);
+    const ok = await gl.postInlineNote(
+      projectId,
+      prNumber,
+      f.file,
+      f.line,
+      commentBody(f, botName),
+      refs,
+    );
     if (!ok) {
       await gl.createNote(
-        projectId, prNumber,
+        projectId,
+        prNumber,
         `_(couldn't anchor inline — ${f.file}:${f.line})_\n\n${commentBody(f, botName)}`,
       );
     }
@@ -111,7 +128,10 @@ export async function finalize(
     const counts: Record<Severity, number> = { critical: 0, warning: 0, info: 0 };
     for (const f of kept) counts[f.severity]++;
     const rows = [...kept]
-      .sort((a, b) => RANK[b.severity] - RANK[a.severity] || a.file.localeCompare(b.file) || a.line - b.line)
+      .sort(
+        (a, b) =>
+          RANK[b.severity] - RANK[a.severity] || a.file.localeCompare(b.file) || a.line - b.line,
+      )
       .map((f) => `| ${EMOJI[f.severity]} ${f.severity} | \`${f.file}:${f.line}\` | ${f.title} |`)
       .join("\n");
     summary =
@@ -124,8 +144,12 @@ export async function finalize(
   }
 
   if (await gl.submitReview(projectId, prNumber, summary)) {
-    await gl.editNote(projectId, prNumber, statusId,
-      `${STATUS_MARKER}\n${botEmoji} Review complete — see the review summary below.`);
+    await gl.editNote(
+      projectId,
+      prNumber,
+      statusId,
+      `${STATUS_MARKER}\n${botEmoji} Review complete — see the review summary below.`,
+    );
   } else {
     await gl.editNote(projectId, prNumber, statusId, `${STATUS_MARKER}\n${summary}`);
   }
@@ -140,7 +164,12 @@ export async function finalize(
   // REST edits the old review in place) — say so in the conversation, once per
   // head commit. "Re-review" = earlier finding markers exist on the PR.
   const isReReview = existingMarkers.length > 0;
-  if (isReReview && posted === 0 && refs.head_sha && !existing.includes(recheckMarker(refs.head_sha))) {
+  if (
+    isReReview &&
+    posted === 0 &&
+    refs.head_sha &&
+    !existing.includes(recheckMarker(refs.head_sha))
+  ) {
     const short = refs.head_sha.slice(0, 8);
     const msg = kept.length
       ? `${botEmoji} ${botName} re-checked \`${short}\` — no new issues; ${kept.length} earlier finding(s) still apply.`
@@ -156,8 +185,13 @@ export async function finalize(
  * marker format and ±3 dedup as the PR path — never change either (invariant 1).
  * No status note / labels: those are PR concepts. One summary per commit. */
 export async function finalizeCommit(
-  forge: Forge, projectId: string, branch: string, headSha: string,
-  diffs: FileDiff[], result: ReviewResult, kept: Finding[],
+  forge: Forge,
+  projectId: string,
+  branch: string,
+  headSha: string,
+  diffs: FileDiff[],
+  result: ReviewResult,
+  kept: Finding[],
   log: (msg: string) => void = () => {},
 ): Promise<void> {
   const botName = reviewerSettings().botName;
@@ -175,11 +209,15 @@ export async function finalizeCommit(
     if (alreadyPosted(f.file, f.line)) continue;
     posted++;
     const ok = await postCommitComment(forge, projectId, headSha, commentBody(f, botName), {
-      path: f.file, line: f.line, patch: patchByFile.get(f.file) ?? "",
+      path: f.file,
+      line: f.line,
+      patch: patchByFile.get(f.file) ?? "",
     });
     if (!ok) {
       await postCommitComment(
-        forge, projectId, headSha,
+        forge,
+        projectId,
+        headSha,
         `_(couldn't anchor inline — ${f.file}:${f.line})_\n\n${commentBody(f, botName)}`,
       );
     }
@@ -191,7 +229,10 @@ export async function finalizeCommit(
       const counts: Record<Severity, number> = { critical: 0, warning: 0, info: 0 };
       for (const f of kept) counts[f.severity]++;
       const rows = [...kept]
-        .sort((a, b) => RANK[b.severity] - RANK[a.severity] || a.file.localeCompare(b.file) || a.line - b.line)
+        .sort(
+          (a, b) =>
+            RANK[b.severity] - RANK[a.severity] || a.file.localeCompare(b.file) || a.line - b.line,
+        )
         .map((f) => `| ${EMOJI[f.severity]} ${f.severity} | \`${f.file}:${f.line}\` | ${f.title} |`)
         .join("\n");
       summary =
@@ -211,11 +252,18 @@ export async function finalizeCommit(
 }
 
 export async function markFailed(
-  gl: ForgeClient, projectId: string, prNumber: number, statusId: number | string,
+  gl: ForgeClient,
+  projectId: string,
+  prNumber: number,
+  statusId: number | string,
 ): Promise<void> {
   const botName = reviewerSettings().botName;
-  await gl.editNote(projectId, prNumber, statusId,
-    `${STATUS_MARKER}\n⚠️ ${botName} hit an error reviewing this MR.`);
+  await gl.editNote(
+    projectId,
+    prNumber,
+    statusId,
+    `${STATUS_MARKER}\n⚠️ ${botName} hit an error reviewing this MR.`,
+  );
 }
 
 export { REVIEW_MARKER };

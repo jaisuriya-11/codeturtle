@@ -19,10 +19,13 @@ async function fetchGithubRepos(token: string): Promise<string[]> {
 }
 
 async function fetchGitlabRepos(url: string, token: string): Promise<string[]> {
-  const r = await fetch(`${url}/api/v4/projects?membership=true&per_page=50&order_by=last_activity_at`, {
-    headers: { "PRIVATE-TOKEN": token },
-    signal: AbortSignal.timeout(15000),
-  });
+  const r = await fetch(
+    `${url}/api/v4/projects?membership=true&per_page=50&order_by=last_activity_at`,
+    {
+      headers: { "PRIVATE-TOKEN": token },
+      signal: AbortSignal.timeout(15000),
+    },
+  );
   if (!r.ok) return [];
   return ((await r.json()) as any[]).map((x) => String(x.path_with_namespace ?? x.id));
 }
@@ -52,7 +55,10 @@ export function RepoPicker({ onDone }: { onDone: () => void }) {
       const found =
         forge === "github"
           ? await fetchGithubRepos(resolveToken("github") ?? "")
-          : await fetchGitlabRepos(creds.gitlab?.url ?? "https://gitlab.com", resolveToken("gitlab") ?? "");
+          : await fetchGitlabRepos(
+              creds.gitlab?.url ?? "https://gitlab.com",
+              resolveToken("gitlab") ?? "",
+            );
       setRepos(found);
       setStep("pick");
     })();
@@ -146,7 +152,10 @@ export function RepoPicker({ onDone }: { onDone: () => void }) {
       <Text bold>Remove from auto-review</Text>
       <Box marginTop={1}>
         <SelectInput
-          items={[...targets.map((t) => ({ label: t, value: t })), { label: "← Back", value: "__back__" }]}
+          items={[
+            ...targets.map((t) => ({ label: t, value: t })),
+            { label: "← Back", value: "__back__" },
+          ]}
           onSelect={(item) => {
             if (item.value === "__back__") return setStep("forge");
             updateConfig("watch", { targets: targets.filter((t) => t !== item.value) });

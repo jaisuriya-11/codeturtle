@@ -107,10 +107,10 @@ describe("finalizeCommit", () => {
       return { json: {} };
     });
 
-    await finalizeCommit(
-      "github", "o/r", "feat", "sha1", diffs, result,
-      [finding(2), { ...finding(2), file: "b.ts" }],
-    );
+    await finalizeCommit("github", "o/r", "feat", "sha1", diffs, result, [
+      finding(2),
+      { ...finding(2), file: "b.ts" },
+    ]);
 
     const posts = calls.filter((c) => c.init?.method === "POST");
     const bodies = posts.map((p) => JSON.parse(String(p.init?.body)));

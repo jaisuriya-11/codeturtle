@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  compareDiffs, diffPosition, listBranches, listCommitCommentBodies, postCommitComment,
+  compareDiffs,
+  diffPosition,
+  listBranches,
+  listCommitCommentBodies,
+  postCommitComment,
 } from "../forgeCommits.js";
 import { installFetch } from "./helpers/fetchMock.js";
 
@@ -96,14 +100,22 @@ describe("listCommitCommentBodies", () => {
 describe("postCommitComment", () => {
   it("anchors GitHub comments by diff position", async () => {
     const { calls } = installFetch(() => ({ json: {} }));
-    await postCommitComment("github", "o/r", "sha", "body", { path: "a.ts", line: 2, patch: PATCH });
+    await postCommitComment("github", "o/r", "sha", "body", {
+      path: "a.ts",
+      line: 2,
+      patch: PATCH,
+    });
     const payload = JSON.parse(String(calls[0].init?.body));
     expect(payload).toEqual({ body: "body", path: "a.ts", position: 2 });
   });
 
   it("falls back to a commit-level comment when the line isn't in the patch", async () => {
     const { calls } = installFetch(() => ({ json: {} }));
-    await postCommitComment("github", "o/r", "sha", "body", { path: "a.ts", line: 99, patch: PATCH });
+    await postCommitComment("github", "o/r", "sha", "body", {
+      path: "a.ts",
+      line: 99,
+      patch: PATCH,
+    });
     const payload = JSON.parse(String(calls[0].init?.body));
     expect(payload).toEqual({ body: "body" });
   });

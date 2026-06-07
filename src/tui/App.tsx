@@ -29,7 +29,10 @@ export function App() {
         <ModelPicker
           onDone={(c) => {
             updateConfig("reviewer", {
-              provider: c.provider, api_key: c.apiKey, base_url: c.baseUrl, model: c.model,
+              provider: c.provider,
+              api_key: c.apiKey,
+              base_url: c.baseUrl,
+              model: c.model,
             });
             setScreen("repo");
           }}

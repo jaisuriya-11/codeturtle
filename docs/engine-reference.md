@@ -208,7 +208,7 @@ Review rules, layered low→high: built-in `DEFAULTS` ← global config & packs 
   repo's `extends` to safe bare pack names, and never lets a repo run a transform — so a PR author
   can't redirect the reviewer, exfiltrate a key, or execute code. Hard
   [security invariant](./invariants.md#2-security-repo-config-is-untrusted). `ctx` (`{ forge,
-  diffLines }`) is passed through to transforms.
+diffLines }`) is passed through to transforms.
 - `DEFAULTS` — `confidenceThreshold: 0.7`, `maxFindings: 25`, a sensible `exclude` list
   (lockfiles, `*.min.js`, generated, `node_modules`, `dist`, `build`), all categories on, and a
   prioritised senior-engineer guideline string.

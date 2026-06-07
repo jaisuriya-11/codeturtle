@@ -3,13 +3,29 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  getBotName, hasForgeCredentials, loadConfig, loadCredentials, resetAll,
-  resetLogin, resolveToken, reviewerConfigured, reviewerSettings, setForge,
+  getBotName,
+  hasForgeCredentials,
+  loadConfig,
+  loadCredentials,
+  resetAll,
+  resetLogin,
+  resolveToken,
+  reviewerConfigured,
+  reviewerSettings,
+  setForge,
   updateConfig,
 } from "../config.js";
 
 const HOME = process.env.CODETURTLE_HOME as string;
-const ENV_KEYS = ["GITHUB_TOKEN", "GITLAB_TOKEN", "REVIEWER_API_KEY", "GEMINI_API_KEY", "REVIEWER_MODEL", "REVIEWER_BASE_URL", "REVIEWER_BOT_NAME"];
+const ENV_KEYS = [
+  "GITHUB_TOKEN",
+  "GITLAB_TOKEN",
+  "REVIEWER_API_KEY",
+  "GEMINI_API_KEY",
+  "REVIEWER_MODEL",
+  "REVIEWER_BASE_URL",
+  "REVIEWER_BOT_NAME",
+];
 
 beforeEach(() => resetAll());
 afterEach(() => {

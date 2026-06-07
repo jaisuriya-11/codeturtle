@@ -5,7 +5,10 @@ import { parseTarget } from "../watch.js";
 describe("parseTarget", () => {
   it("parses forge:repo", () => {
     expect(parseTarget("github:owner/repo")).toEqual({ forge: "github", repo: "owner/repo" });
-    expect(parseTarget("gitlab:group/sub/proj")).toEqual({ forge: "gitlab", repo: "group/sub/proj" });
+    expect(parseTarget("gitlab:group/sub/proj")).toEqual({
+      forge: "gitlab",
+      repo: "group/sub/proj",
+    });
   });
 
   it("lowercases the forge", () => {

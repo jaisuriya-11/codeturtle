@@ -5,7 +5,13 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { normsDir } from "../config.js";
-import { closeShape, loadPacks, loadTransforms, mergeNorms, safePackName } from "../normsRegistry.js";
+import {
+  closeShape,
+  loadPacks,
+  loadTransforms,
+  mergeNorms,
+  safePackName,
+} from "../normsRegistry.js";
 import type { Norms, RawNorms } from "../types.js";
 
 const DIR = normsDir();
@@ -72,7 +78,11 @@ describe("loadPacks", () => {
 
 describe("mergeNorms", () => {
   it("last-writer-wins for scalars, shallow-merges categories", () => {
-    const layer: RawNorms = { confidence_threshold: 0.5, max_findings: 10, categories: { perf: true } };
+    const layer: RawNorms = {
+      confidence_threshold: 0.5,
+      max_findings: 10,
+      categories: { perf: true },
+    };
     const out = mergeNorms(base, layer);
     expect(out.confidenceThreshold).toBe(0.5);
     expect(out.maxFindings).toBe(10);
@@ -86,7 +96,10 @@ describe("mergeNorms", () => {
   });
 
   it("unions excludes and concatenates examples", () => {
-    const out = mergeNorms(base, { exclude: ["**/dist/**", "**/*.snap"], examples: [{ bad: "z" }] });
+    const out = mergeNorms(base, {
+      exclude: ["**/dist/**", "**/*.snap"],
+      examples: [{ bad: "z" }],
+    });
     expect(out.exclude).toEqual(["**/dist/**", "**/*.snap"]); // dedup keeps dist once
     expect(out.examples).toEqual([{ bad: "x", why: "y" }, { bad: "z" }]);
   });
@@ -104,7 +117,14 @@ describe("closeShape", () => {
     const dirty = { ...base, evil: "pwned" } as unknown as Norms;
     const out = closeShape(dirty);
     expect(Object.keys(out).sort()).toEqual(
-      ["categories", "confidenceThreshold", "examples", "exclude", "guidelines", "maxFindings"].sort(),
+      [
+        "categories",
+        "confidenceThreshold",
+        "examples",
+        "exclude",
+        "guidelines",
+        "maxFindings",
+      ].sort(),
     );
     expect("evil" in out).toBe(false);
   });
@@ -112,7 +132,10 @@ describe("closeShape", () => {
 
 describe("loadTransforms", () => {
   it("loads a valid default-exported transform, skips missing/invalid/unsafe names", async () => {
-    writeFile("scale.mjs", "export default { name: 'scale', transform: (n) => { n.maxFindings = 99; return n; } }");
+    writeFile(
+      "scale.mjs",
+      "export default { name: 'scale', transform: (n) => { n.maxFindings = 99; return n; } }",
+    );
     writeFile("nofn.mjs", "export default { name: 'nofn' }"); // no transform fn
     const got = await loadTransforms(["scale", "nofn", "missing", "../evil"]);
     expect(got.map((t) => t.name)).toEqual(["scale"]);

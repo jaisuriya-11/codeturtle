@@ -126,11 +126,13 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
         {provider?.local && models.length === 0 ? (
           localServerUp ? (
             <Text color="yellow">
-              Server at {provider.baseUrl} is running but has no models — pull one first
-              (e.g. `ollama pull qwen2.5-coder`), then type its name here.
+              Server at {provider.baseUrl} is running but has no models — pull one first (e.g.
+              `ollama pull qwen2.5-coder`), then type its name here.
             </Text>
           ) : (
-            <Text color="yellow">No local server detected at {provider.baseUrl} — enter the model anyway.</Text>
+            <Text color="yellow">
+              No local server detected at {provider.baseUrl} — enter the model anyway.
+            </Text>
           )
         ) : null}
         <Box>

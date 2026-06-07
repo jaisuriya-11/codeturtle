@@ -12,7 +12,11 @@ const clip = (text: string, limit = 6000) =>
   text.length <= limit ? text : `${text.slice(0, limit)}\n… (truncated)`;
 
 export async function buildContext(
-  gl: ForgeClient, projectId: string, head: string, diffs: FileDiff[], _norms: Norms,
+  gl: ForgeClient,
+  projectId: string,
+  head: string,
+  diffs: FileDiff[],
+  _norms: Norms,
   log: (msg: string) => void = () => {},
 ): Promise<ContextBundle> {
   const files = new Map<string, ContextFile>();
@@ -77,7 +81,8 @@ export async function buildContext(
   const kept: ContextFile[] = [];
   let total = 0;
   for (const f of ranked) {
-    if (kept.length >= limits.maxContextFiles || total + f.content.length > limits.maxContextChars) break;
+    if (kept.length >= limits.maxContextFiles || total + f.content.length > limits.maxContextChars)
+      break;
     kept.push(f);
     total += f.content.length;
   }

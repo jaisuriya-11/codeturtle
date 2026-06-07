@@ -5,8 +5,13 @@ import OpenAI from "openai";
 
 import { reviewerSettings } from "./config.js";
 import {
-  renderContext, type Category, type ContextBundle, type Finding, type Norms,
-  type ReviewResult, type Severity,
+  renderContext,
+  type Category,
+  type ContextBundle,
+  type Finding,
+  type Norms,
+  type ReviewResult,
+  type Severity,
 } from "./types.js";
 
 const BASE_PROMPT = `You are a senior engineer reviewing a merge-request diff.
@@ -86,7 +91,9 @@ function systemPrompt(norms: Norms): string {
     const ex = norms.examples.map((e) => `- BAD: ${e.bad ?? ""}\n  WHY: ${e.why ?? ""}`).join("\n");
     parts.push(`EXAMPLES OF ISSUES THIS TEAM CARES ABOUT:\n${ex}`);
   }
-  const enabled = Object.entries(norms.categories).filter(([, on]) => on).map(([c]) => c);
+  const enabled = Object.entries(norms.categories)
+    .filter(([, on]) => on)
+    .map(([c]) => c);
   if (enabled.length) parts.push(`Only report these categories: ${enabled.join(", ")}.`);
   return parts.join("\n\n");
 }
@@ -103,10 +110,19 @@ function coerceConfidence(v: unknown): number {
 }
 
 function parseFinding(f: any): Finding | null {
-  const severity = String(f?.severity ?? "").trim().toLowerCase();
-  const category = String(f?.category ?? "").trim().toLowerCase();
+  const severity = String(f?.severity ?? "")
+    .trim()
+    .toLowerCase();
+  const category = String(f?.category ?? "")
+    .trim()
+    .toLowerCase();
   const line = Number(f?.line);
-  if (!f?.file || !Number.isFinite(line) || !SEVERITIES.has(severity) || !CATEGORIES.has(category)) {
+  if (
+    !f?.file ||
+    !Number.isFinite(line) ||
+    !SEVERITIES.has(severity) ||
+    !CATEGORIES.has(category)
+  ) {
     return null;
   }
   return {
@@ -151,7 +167,8 @@ export function dedupeFindings(findings: Finding[]): Finding[] {
 /** Retry transient model errors (rate limits, server hiccups) with backoff.
  * Honors Retry-After when the provider sends one. */
 async function createWithRetry(
-  client: OpenAI, params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+  client: OpenAI,
+  params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
   log: (msg: string) => void,
 ): Promise<OpenAI.Chat.ChatCompletion> {
   let delay = Number(process.env.REVIEWER_RETRY_BASE_MS ?? 5000);
@@ -162,10 +179,11 @@ async function createWithRetry(
       const status = e?.status;
       if (![429, 500, 502, 503].includes(status) || attempt >= 2) throw e;
       const retryAfter = Number(e?.headers?.["retry-after"]);
-      const wait = Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(retryAfter * 1000, 60_000)
-        : delay;
-      log(`model returned ${status}${status === 429 ? " (rate limited)" : ""} — retrying in ${Math.round(wait / 1000)}s`);
+      const wait =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 60_000) : delay;
+      log(
+        `model returned ${status}${status === 429 ? " (rate limited)" : ""} — retrying in ${Math.round(wait / 1000)}s`,
+      );
       await new Promise((r) => setTimeout(r, wait));
       delay *= 3;
     }
@@ -173,7 +191,10 @@ async function createWithRetry(
 }
 
 async function runPass(
-  client: OpenAI, model: string, system: string, user: string,
+  client: OpenAI,
+  model: string,
+  system: string,
+  user: string,
   log: (msg: string) => void,
 ): Promise<ReviewResult> {
   const messages = [
@@ -183,9 +204,16 @@ async function runPass(
 
   let raw: string;
   try {
-    const resp = await createWithRetry(client, {
-      model, messages, temperature: 0.2, response_format: { type: "json_object" },
-    }, log);
+    const resp = await createWithRetry(
+      client,
+      {
+        model,
+        messages,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+      },
+      log,
+    );
     raw = resp.choices[0]?.message?.content ?? "{}";
   } catch (e: any) {
     // some compat servers reject response_format — only then strip it and retry;
@@ -214,7 +242,9 @@ async function runPass(
 }
 
 export async function review(
-  diffText: string, context: ContextBundle, norms: Norms,
+  diffText: string,
+  context: ContextBundle,
+  norms: Norms,
   log: (msg: string) => void = () => {},
 ): Promise<ReviewResult> {
   const s = reviewerSettings();
@@ -225,7 +255,9 @@ export async function review(
   const system = systemPrompt(norms);
   const user = `## Surrounding codebase context\n${renderContext(context)}\n\n## Diff to review\n${diffText}`;
   const foci = ["security", "logic"].slice(0, s.passes - 1);
-  log(`reviewing model=${s.model} passes=${s.passes} diff=${diffText.length} ctx_files=${context.files.length}`);
+  log(
+    `reviewing model=${s.model} passes=${s.passes} diff=${diffText.length} ctx_files=${context.files.length}`,
+  );
 
   // general pass failure is fatal (existing behaviour); focus passes are best-effort
   const [general, ...extras] = await Promise.all([

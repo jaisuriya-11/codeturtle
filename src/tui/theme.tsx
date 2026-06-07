@@ -12,7 +12,7 @@ const LOGO = [
   "   ██║   ██║   ██║██████╔╝   ██║   ██║     █████╗  ",
   "   ██║   ██║   ██║██╔══██╗   ██║   ██║     ██╔══╝  ",
   "   ██║   ╚██████╔╝██║  ██║   ██║   ███████╗███████╗",
-  "   ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝"
+  "   ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝",
 ];
 
 const LOGO_COLORS = [
@@ -21,7 +21,7 @@ const LOGO_COLORS = [
   "#1abc9c", // turquoise
   "#16a085", // dark turquoise
   "#3498db", // peter river blue
-  "#2980b9"  // belize hole blue
+  "#2980b9", // belize hole blue
 ];
 
 export function Header({ subtitle }: { subtitle?: string }) {
@@ -40,7 +40,7 @@ export function Header({ subtitle }: { subtitle?: string }) {
           </Text>
         );
       })}
-      <Text color={DIM}>  local AI code reviewer — any model, no cloud</Text>
+      <Text color={DIM}> local AI code reviewer — any model, no cloud</Text>
       {subtitle ? <Text color={DIM}>{subtitle}</Text> : null}
     </Box>
   );

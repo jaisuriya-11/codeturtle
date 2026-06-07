@@ -7,14 +7,27 @@ import { parse } from "yaml";
 
 import { loadConfig } from "./config.js";
 import type { ForgeClient } from "./forge.js";
-import { closeShape, loadPacks, loadTransforms, mergeNorms, safePackName } from "./normsRegistry.js";
+import {
+  closeShape,
+  loadPacks,
+  loadTransforms,
+  mergeNorms,
+  safePackName,
+} from "./normsRegistry.js";
 import type { Forge, MrInfo, NormCtx, Norms, RawNorms } from "./types.js";
 import type { FileDiff } from "./types.js";
 
 const DEFAULTS: Norms = {
   confidenceThreshold: 0.7,
   maxFindings: 25,
-  exclude: ["**/*.lock", "**/*.min.js", "**/__generated__/**", "**/node_modules/**", "**/dist/**", "**/build/**"],
+  exclude: [
+    "**/*.lock",
+    "**/*.min.js",
+    "**/__generated__/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+  ],
   categories: { security: true, bug: true, perf: true, style: true, maintainability: true },
   guidelines: `Review like a careful senior engineer. Prioritise, in order:
 1. Security — injection, secrets in code, broken authn/authz, unsafe deserialization.
@@ -106,7 +119,11 @@ export function isExcluded(path: string, norms: Norms): boolean {
   const basename = path.split("/").pop() ?? path;
   for (const pat of norms.exclude) {
     const stripped = pat.startsWith("**/") ? pat.slice(3) : pat;
-    if (globToRegex(pat).test(path) || globToRegex(stripped).test(path) || globToRegex(stripped).test(basename)) {
+    if (
+      globToRegex(pat).test(path) ||
+      globToRegex(stripped).test(path) ||
+      globToRegex(stripped).test(basename)
+    ) {
       return true;
     }
   }

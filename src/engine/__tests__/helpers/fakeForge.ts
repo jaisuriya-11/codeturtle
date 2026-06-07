@@ -4,7 +4,7 @@
 import { vi } from "vitest";
 
 import type { ForgeClient, Note } from "../../forge.js";
-import type { DiffRefs, FileDiff, MrInfo } from "../../types.js";
+import type { FileDiff, MrInfo } from "../../types.js";
 
 export interface FakeForgeOptions {
   /** path -> file contents at the head ref */
@@ -45,13 +45,15 @@ export function makeFakeForge(opts: FakeForgeOptions = {}): FakeForge {
 
     close: vi.fn(async () => {}),
 
-    getMr: vi.fn(async (): Promise<MrInfo> => ({
-      sourceBranch: "feature",
-      targetBranch: "main",
-      headSha: "headsha",
-      diffRefs: { head_sha: "headsha", base_sha: "basesha", start_sha: "startsha" },
-      ...opts.mr,
-    })),
+    getMr: vi.fn(
+      async (): Promise<MrInfo> => ({
+        sourceBranch: "feature",
+        targetBranch: "main",
+        headSha: "headsha",
+        diffRefs: { head_sha: "headsha", base_sha: "basesha", start_sha: "startsha" },
+        ...opts.mr,
+      }),
+    ),
 
     getDiffs: vi.fn(async () => opts.diffs ?? []),
 

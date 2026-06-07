@@ -60,7 +60,9 @@ export function parseCommentToFinding(body: string): ParsedFinding | null {
   comment = comment.replace(/<!-- ct:f:.+? -->/, "");
 
   const lines = comment.split("\n");
-  const headerIdx = lines.findIndex(l => l.includes("**") && (l.includes("·") || l.includes("confidence")));
+  const headerIdx = lines.findIndex(
+    (l) => l.includes("**") && (l.includes("·") || l.includes("confidence")),
+  );
   if (headerIdx !== -1) {
     lines.splice(0, headerIdx + 1);
   }

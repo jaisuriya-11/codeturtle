@@ -32,11 +32,19 @@ export function seenEvent(uuid: string | null | undefined): boolean {
   return false;
 }
 
-export function recordLatest(projectId: string, prNumber: number | string, headSha: string | null): void {
+export function recordLatest(
+  projectId: string,
+  prNumber: number | string,
+  headSha: string | null,
+): void {
   if (headSha) latestCommit.set(key(projectId, prNumber), headSha);
 }
 
-export function isLatest(projectId: string, prNumber: number | string, headSha: string | null): boolean {
+export function isLatest(
+  projectId: string,
+  prNumber: number | string,
+  headSha: string | null,
+): boolean {
   if (!headSha) return true;
   const latest = latestCommit.get(key(projectId, prNumber));
   return latest == null || latest === headSha;
@@ -84,4 +92,3 @@ export function releaseLock(projectId: string, prNumber: number | string): void 
     }
   } catch {}
 }
-

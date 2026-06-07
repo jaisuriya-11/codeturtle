@@ -93,7 +93,13 @@ export async function watch(targets: string[], opts: WatchOptions): Promise<void
             }
             log(`new push ${bkey} — queueing review`);
             state.recordLatest(repo, `branch:${b.name}`, b.sha);
-            pushJobs.push({ forge, projectId: repo, branch: b.name, headSha: b.sha, baseSha: prev });
+            pushJobs.push({
+              forge,
+              projectId: repo,
+              branch: b.name,
+              headSha: b.sha,
+              baseSha: prev,
+            });
           }
         }
       } catch (e) {
@@ -110,12 +116,16 @@ export async function watch(targets: string[], opts: WatchOptions): Promise<void
     for (const job of jobs) {
       if (opts.signal?.aborted) break;
       opts.onJob?.(job);
-      runReview(job, log).catch((e) => log(`review crashed pr=${job.prNumber}: ${describeError(e)}`));
+      runReview(job, log).catch((e) =>
+        log(`review crashed pr=${job.prNumber}: ${describeError(e)}`),
+      );
     }
     for (const job of pushJobs) {
       if (opts.signal?.aborted) break;
       opts.onPushJob?.(job);
-      runPushReview(job, log).catch((e) => log(`review crashed branch=${job.branch}: ${describeError(e)}`));
+      runPushReview(job, log).catch((e) =>
+        log(`review crashed branch=${job.branch}: ${describeError(e)}`),
+      );
     }
     firstCycle = false;
 
@@ -134,4 +144,3 @@ export async function watch(targets: string[], opts: WatchOptions): Promise<void
     });
   }
 }
-

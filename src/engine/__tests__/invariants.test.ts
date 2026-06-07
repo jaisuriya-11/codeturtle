@@ -6,7 +6,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadCredentials, normsDir, resetAll, resolveToken, setForge, updateConfig } from "../config.js";
+import {
+  loadCredentials,
+  normsDir,
+  resetAll,
+  resolveToken,
+  setForge,
+  updateConfig,
+} from "../config.js";
 import { loadNorms } from "../norms.js";
 import { finalize } from "../poster.js";
 import { acquireLock, isLatest, recordLatest, releaseLock } from "../state.js";
@@ -33,7 +40,9 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 const rev = vi.hoisted(() => ({ content: "{}" }));
 vi.mock("openai", () => ({
   default: class {
-    chat = { completions: { create: async () => ({ choices: [{ message: { content: rev.content } }] }) } };
+    chat = {
+      completions: { create: async () => ({ choices: [{ message: { content: rev.content } }] }) },
+    };
   },
 }));
 
@@ -49,7 +58,13 @@ afterEach(() => {
 const refs: DiffRefs = { head_sha: "h", base_sha: "b", start_sha: "s" };
 const mr: MrInfo = { sourceBranch: "f", targetBranch: "main", headSha: "h", diffRefs: refs };
 const finding = (file: string, line: number): Finding => ({
-  file, line, severity: "warning", category: "bug", confidence: 0.9, title: "t", comment: "c",
+  file,
+  line,
+  severity: "warning",
+  category: "bug",
+  confidence: 0.9,
+  title: "t",
+  comment: "c",
 });
 
 describe("Invariant 1 — markers are the idempotency system (±3 line tolerance)", () => {
@@ -124,7 +139,10 @@ describe("Invariant 3 — secrets stay in ~/.codeturtle, env tokens never writte
 describe("Invariant 4 — credentials.json shape is an additive contract", () => {
   it("merge-writes preserve unknown/extra fields", () => {
     // simulate a future field written by a newer version
-    writeFileSync(join(HOME, "credentials.json"), JSON.stringify({ github: { token: "t", future_field: "keep" } }));
+    writeFileSync(
+      join(HOME, "credentials.json"),
+      JSON.stringify({ github: { token: "t", future_field: "keep" } }),
+    );
     setForge("github", { user: "u" });
     const raw = JSON.parse(readFileSync(join(HOME, "credentials.json"), "utf8"));
     expect(raw.github.future_field).toBe("keep");
@@ -141,9 +159,13 @@ describe("Invariant 5 — GitHub MCP posts exactly ONE review (pending-review fl
     await c.postInlineNote("o/r", 1, "a.ts", 9, "b2", refs);
     await c.submitReview("o/r", 1, "summary");
 
-    const creates = mcp.calls.filter((x) => x.name === "pull_request_review_write" && x.args.method === "create");
+    const creates = mcp.calls.filter(
+      (x) => x.name === "pull_request_review_write" && x.args.method === "create",
+    );
     const adds = mcp.calls.filter((x) => x.name === "add_comment_to_pending_review");
-    const submits = mcp.calls.filter((x) => x.name === "pull_request_review_write" && x.args.method === "submit_pending");
+    const submits = mcp.calls.filter(
+      (x) => x.name === "pull_request_review_write" && x.args.method === "submit_pending",
+    );
     expect(creates).toHaveLength(1);
     expect(adds).toHaveLength(2);
     expect(submits).toHaveLength(1);
@@ -155,18 +177,33 @@ describe("Invariant 6 — reviewer output is hostile input (drop invalid finding
     process.env.REVIEWER_API_KEY = "k";
     rev.content = JSON.stringify({
       findings: [
-        { file: "a.ts", line: 5, severity: "critical", category: "bug", confidence: 0.8, title: "t", comment: "c" },
+        {
+          file: "a.ts",
+          line: 5,
+          severity: "critical",
+          category: "bug",
+          confidence: 0.8,
+          title: "t",
+          comment: "c",
+        },
         { line: 3, severity: "warning", category: "bug", confidence: 0.5 }, // no file → dropped
         { file: "b.ts", line: 1, severity: "nope", category: "bug", confidence: 0.5 }, // bad enum → dropped
       ],
       summary: "s",
     });
     const { review } = await import("../reviewer.js");
-    const r = await review("diff", { files: [], notes: [] }, {
-      confidenceThreshold: 0, maxFindings: 25, exclude: [],
-      categories: { security: true, bug: true, perf: true, style: true, maintainability: true },
-      guidelines: "", examples: [],
-    });
+    const r = await review(
+      "diff",
+      { files: [], notes: [] },
+      {
+        confidenceThreshold: 0,
+        maxFindings: 25,
+        exclude: [],
+        categories: { security: true, bug: true, perf: true, style: true, maintainability: true },
+        guidelines: "",
+        examples: [],
+      },
+    );
     expect(r.findings).toHaveLength(1);
   });
 });

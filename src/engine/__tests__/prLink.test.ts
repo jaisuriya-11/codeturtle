@@ -40,7 +40,12 @@ describe("parsePrLink", () => {
   });
 
   it("returns null for unparseable input", () => {
-    for (const bad of ["", "not a link", "https://github.com/owner/repo", "https://example.com/x/y/z"]) {
+    for (const bad of [
+      "",
+      "not a link",
+      "https://github.com/owner/repo",
+      "https://example.com/x/y/z",
+    ]) {
       expect(parsePrLink(bad)).toBeNull();
     }
   });

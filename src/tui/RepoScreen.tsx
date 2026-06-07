@@ -46,8 +46,14 @@ export function RepoScreen({ onSelect }: { onSelect: (repo: RepoRef) => void }) 
         <Box marginTop={1}>
           <SelectInput
             items={[
-              { label: `GitHub${creds.github?.user ? `  (${creds.github.user})` : ""}`, value: "github" },
-              { label: `GitLab${creds.gitlab?.user ? `  (${creds.gitlab.user})` : ""}`, value: "gitlab" },
+              {
+                label: `GitHub${creds.github?.user ? `  (${creds.github.user})` : ""}`,
+                value: "github",
+              },
+              {
+                label: `GitLab${creds.gitlab?.user ? `  (${creds.gitlab.user})` : ""}`,
+                value: "gitlab",
+              },
             ]}
             onSelect={(item) => {
               setForgeChoice(item.value as Forge);
@@ -100,9 +106,7 @@ export function RepoScreen({ onSelect }: { onSelect: (repo: RepoRef) => void }) 
           items={[
             ...repos.slice(0, 30).map((r) => ({ label: r, value: r })),
             { label: "✎  type repo manually", value: "__manual__" },
-            ...(hasGithub && hasGitlab
-              ? [{ label: "← Switch forge", value: "__forge__" }]
-              : []),
+            ...(hasGithub && hasGitlab ? [{ label: "← Switch forge", value: "__forge__" }] : []),
           ]}
           onSelect={(item) => {
             if (item.value === "__manual__") setStep("manual");
