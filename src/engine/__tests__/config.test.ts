@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_TOKEN_LIMIT,
   getBotName,
   hasForgeCredentials,
   loadConfig,
@@ -12,6 +13,8 @@ import {
   resolveToken,
   reviewerConfigured,
   reviewerSettings,
+  reviewLimits,
+  reviewTokenLimit,
   setForge,
   updateConfig,
 } from "../config.js";
@@ -25,6 +28,10 @@ const ENV_KEYS = [
   "REVIEWER_MODEL",
   "REVIEWER_BASE_URL",
   "REVIEWER_BOT_NAME",
+  "REVIEWER_TOKEN_LIMIT",
+  "MAX_DIFF_CHARS",
+  "MAX_CONTEXT_FILES",
+  "MAX_CONTEXT_CHARS",
 ];
 
 beforeEach(() => resetAll());
@@ -138,6 +145,38 @@ describe("resetLogin", () => {
     expect(loadConfig().watch).toEqual({ targets: [], interval: 45 });
     expect(hasForgeCredentials()).toBe(false);
     expect(reviewerConfigured()).toBe(false);
+  });
+});
+
+describe("review token limit & limits", () => {
+  it("defaults to DEFAULT_TOKEN_LIMIT and the previous char caps", () => {
+    expect(reviewTokenLimit()).toBe(DEFAULT_TOKEN_LIMIT);
+    expect(reviewLimits()).toEqual({
+      maxDiffChars: 40000,
+      maxContextFiles: 12,
+      maxContextChars: 40000,
+    });
+  });
+  it("derives char budgets from the stored token_limit", () => {
+    updateConfig("reviewer", { token_limit: 10000 });
+    expect(reviewTokenLimit()).toBe(10000);
+    const l = reviewLimits();
+    expect(l.maxDiffChars).toBe(20000); // tokens*4 split between diff and context
+    expect(l.maxContextChars).toBe(20000);
+  });
+  it("lets env override the store, and char env vars override the derivation", () => {
+    updateConfig("reviewer", { token_limit: 10000 });
+    process.env.REVIEWER_TOKEN_LIMIT = "30000";
+    expect(reviewTokenLimit()).toBe(30000);
+    process.env.MAX_DIFF_CHARS = "1234";
+    expect(reviewLimits().maxDiffChars).toBe(1234);
+    expect(reviewLimits().maxContextChars).toBe(60000);
+  });
+  it("falls back to the default on junk values", () => {
+    updateConfig("reviewer", { token_limit: -5 });
+    expect(reviewTokenLimit()).toBe(DEFAULT_TOKEN_LIMIT);
+    process.env.REVIEWER_TOKEN_LIMIT = "not-a-number";
+    expect(reviewTokenLimit()).toBe(DEFAULT_TOKEN_LIMIT);
   });
 });
 

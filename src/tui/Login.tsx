@@ -1,14 +1,14 @@
 /** Login screen: connect ONE forge (GitHub OAuth / GitHub CLI / GitHub token /
  * GitLab token). Model setup lives in settings — first review prompts if missing. */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { Box, Text } from "ink";
 import SelectInput from "ink-select-input";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import React, { useEffect, useState } from "react";
 
-import { setForge } from "../engine/config.js";
+import { resolveToken, setForge } from "../engine/config.js";
 import {
   connectGithubApp,
   inspectApp,
@@ -18,12 +18,35 @@ import {
 import {
   completeDeviceFlow,
   getGithubClientId,
+  GITHUB_APP_INSTALL_URL,
   startDeviceFlow,
+  userHasAppInstallation,
   type DeviceFlowStart,
 } from "../engine/githubAuth.js";
 import { ACCENT, DIM, Header } from "./theme.js";
 
-type Step = "pick" | "githubKey" | "githubDevice" | "gitlabKey" | "appId" | "appKey" | "appPick";
+type Step =
+  | "pick"
+  | "githubKey"
+  | "githubInstall"
+  | "githubDevice"
+  | "gitlabKey"
+  | "appId"
+  | "appKey"
+  | "appPick";
+
+/** Best-effort browser open, per platform (darwin/win32/linux). Sign-in never
+ * depends on it — every URL is also printed in the TUI. */
+function openUrl(url: string): void {
+  const cmd =
+    process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
+  } catch {
+    // opening is convenience only
+  }
+}
 
 function ghCliToken(): string | null {
   try {
@@ -71,6 +94,8 @@ export function Login({ onDone }: { onDone: () => void }) {
   const [appId, setAppId] = useState("");
   const [appPem, setAppPem] = useState("");
   const [appInfo, setAppInfo] = useState<AppIdentity | null>(null);
+  // OAuth finished but the app isn't installed anywhere yet — finish from the install step
+  const [signedIn, setSignedIn] = useState(false);
 
   // OAuth device flow: request a code, poll until the user authorises.
   useEffect(() => {
@@ -88,6 +113,7 @@ export function Login({ onDone }: { onDone: () => void }) {
         const info = await startDeviceFlow(clientId);
         if (ctrl.signal.aborted) return;
         setDevice(info);
+        openUrl(info.verificationUri);
         const user = await completeDeviceFlow(
           clientId,
           info.deviceCode,
@@ -96,6 +122,16 @@ export function Login({ onDone }: { onDone: () => void }) {
         );
         if (ctrl.signal.aborted) return;
         setDevice(null);
+        // the app's OAuth token only reaches repos the app is installed on —
+        // a sign-in without an installation can't review anything
+        const installed = await userHasAppInstallation(resolveToken("github") ?? "");
+        if (ctrl.signal.aborted) return;
+        if (installed === false) {
+          setSignedIn(true);
+          setError("signed in, but the code turtle app isn't installed on any repo or org yet");
+          setStep("githubInstall");
+          return;
+        }
         setError(user ? null : "Signed in, but couldn't read your username.");
         onDone();
       } catch (e) {
@@ -108,6 +144,25 @@ export function Login({ onDone }: { onDone: () => void }) {
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  // install step → continue: already signed in means re-check the installation,
+  // otherwise move on to the device flow
+  const continueFromInstall = async () => {
+    if (!signedIn) {
+      setError(null);
+      setStep("githubDevice");
+      return;
+    }
+    setBusy("Checking app installation…");
+    const installed = await userHasAppInstallation(resolveToken("github") ?? "");
+    setBusy(null);
+    if (installed === false) {
+      setError(`still not installed — open ${GITHUB_APP_INSTALL_URL}, install, then continue`);
+      return;
+    }
+    setError(null);
+    onDone();
+  };
 
   const connectGithubToken = async (token: string) => {
     setBusy("Validating GitHub token…");
@@ -207,7 +262,7 @@ export function Login({ onDone }: { onDone: () => void }) {
               onSelect={(item) => {
                 if (item.value === "oauth") {
                   setError(null);
-                  setStep("githubDevice");
+                  setStep("githubInstall");
                 } else if (item.value === "app") {
                   setError(null);
                   setStep("appId");
@@ -219,6 +274,38 @@ export function Login({ onDone }: { onDone: () => void }) {
                   setStep("githubKey");
                 } else if (item.value === "gitlab") {
                   setStep("gitlabKey");
+                }
+              }}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === "githubInstall" && (
+        <Box flexDirection="column">
+          <Text bold>Install the code turtle app first</Text>
+          <Text color={DIM}>
+            reviews only reach repos the app is installed on — install it, then continue:
+          </Text>
+          <Text color={ACCENT}>{GITHUB_APP_INSTALL_URL}</Text>
+          <Box marginTop={1}>
+            <SelectInput
+              items={[
+                { label: "Open the install page in my browser", value: "open" },
+                {
+                  label: signedIn
+                    ? "I've installed it — finish sign-in"
+                    : "I've installed it — continue to sign in",
+                  value: "continue",
+                },
+                { label: "← Back", value: "back" },
+              ]}
+              onSelect={(item) => {
+                if (item.value === "open") openUrl(GITHUB_APP_INSTALL_URL);
+                else if (item.value === "continue") void continueFromInstall();
+                else {
+                  setError(null);
+                  setStep("pick");
                 }
               }}
             />

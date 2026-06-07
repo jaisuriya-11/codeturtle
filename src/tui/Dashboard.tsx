@@ -12,6 +12,7 @@ import {
   resetLogin,
   reviewerConfigured,
   reviewerSettings,
+  reviewTokenLimit,
   updateConfig,
 } from "../engine/config.js";
 import { runReview } from "../engine/pipeline.js";
@@ -25,7 +26,15 @@ import type { RepoRef } from "./RepoScreen.js";
 import { ReviewViewer } from "./ReviewViewer.js";
 import { ACCENT, DIM, Header, KeyHint } from "./theme.js";
 
-type Overlay = "none" | "settings" | "general" | "model" | "repos" | "confirmReset" | "viewReview";
+type Overlay =
+  | "none"
+  | "settings"
+  | "general"
+  | "tokenLimit"
+  | "model"
+  | "repos"
+  | "confirmReset"
+  | "viewReview";
 
 type Tab = "open" | "closed";
 
@@ -51,6 +60,7 @@ export function Dashboard({
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [model, setModel] = useState(reviewerSettings().model);
   const [passes, setPasses] = useState(reviewerSettings().passes);
+  const [tokenLimit, setTokenLimit] = useState(reviewTokenLimit());
   const [pendingPr, setPendingPr] = useState<number | null>(null);
   const [viewPr, setViewPr] = useState<number | null>(null);
   const [watching, setWatching] = useState(false);
@@ -254,6 +264,8 @@ export function Dashboard({
       setOverlay("none");
     } else if (overlay === "general" && key.escape) {
       setOverlay("settings");
+    } else if (overlay === "tokenLimit" && key.escape) {
+      setOverlay("general");
     }
   });
 
@@ -270,8 +282,10 @@ export function Dashboard({
               api_key: c.apiKey,
               base_url: c.baseUrl,
               model: c.model,
+              token_limit: c.tokenLimit,
             });
             setModel(c.model);
+            setTokenLimit(c.tokenLimit);
             setOverlay("none");
             if (pendingPr != null) {
               runOn(pendingPr);
@@ -303,18 +317,28 @@ export function Dashboard({
     );
   }
 
-  if (overlay === "settings" || overlay === "general" || overlay === "confirmReset") {
+  if (
+    overlay === "settings" ||
+    overlay === "general" ||
+    overlay === "tokenLimit" ||
+    overlay === "confirmReset"
+  ) {
     return (
       <SettingsOverlay
         view={overlay as SettingsView}
         model={model}
         passes={passes}
+        tokenLimit={tokenLimit}
         onNavigate={(view) => setOverlay(view)}
         onCyclePasses={() => {
           // 1 → 2 → 3 → 1: extra passes re-scan with security/logic checklists
           const next = passes >= 3 ? 1 : passes + 1;
           updateConfig("reviewer", { passes: next });
           setPasses(next);
+        }}
+        onSetTokenLimit={(limit) => {
+          updateConfig("reviewer", { token_limit: limit });
+          setTokenLimit(limit);
         }}
         onQuit={() => {
           abortRef.current?.abort();

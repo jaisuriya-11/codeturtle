@@ -1,7 +1,7 @@
 /** Core review loop: superseding check, lock, context bundle, LLM call, post. */
 
 import { buildContext } from "./bundler.js";
-import { limits } from "./config.js";
+import { reviewLimits } from "./config.js";
 import { describeError, getForgeClient, getRestForgeClient, type ForgeClient } from "./forge.js";
 import { compareDiffs } from "./forgeCommits.js";
 import { applyExcludes, loadNorms } from "./norms.js";
@@ -81,7 +81,12 @@ export async function runReview(job: Job, log: Logger = console.log): Promise<vo
       return;
     }
     const context = await buildContext(gl, projectId, headRef, filtered, norms, log);
-    const result = await review(formatDiff(filtered, limits.maxDiffChars), context, norms, log);
+    const result = await review(
+      formatDiff(filtered, reviewLimits().maxDiffChars),
+      context,
+      norms,
+      log,
+    );
     let kept = result.findings.filter((f) => f.confidence >= norms.confidenceThreshold);
     kept = kept.slice(0, norms.maxFindings);
     kept = snapFindings(filtered, kept);
@@ -136,7 +141,12 @@ export async function runPushReview(job: PushJob, log: Logger = console.log): Pr
       return;
     }
     const context = await buildContext(gl, projectId, headSha, filtered, norms, log);
-    const result = await review(formatDiff(filtered, limits.maxDiffChars), context, norms, log);
+    const result = await review(
+      formatDiff(filtered, reviewLimits().maxDiffChars),
+      context,
+      norms,
+      log,
+    );
     let kept = result.findings.filter((f) => f.confidence >= norms.confidenceThreshold);
     kept = kept.slice(0, norms.maxFindings);
     kept = snapFindings(filtered, kept);
