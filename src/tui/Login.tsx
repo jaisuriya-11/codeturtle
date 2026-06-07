@@ -10,6 +10,12 @@ import React, { useEffect, useState } from "react";
 
 import { setForge } from "../engine/config.js";
 import {
+  connectGithubApp,
+  inspectApp,
+  readPrivateKey,
+  type AppIdentity,
+} from "../engine/githubApp.js";
+import {
   completeDeviceFlow,
   getGithubClientId,
   startDeviceFlow,
@@ -17,7 +23,7 @@ import {
 } from "../engine/githubAuth.js";
 import { ACCENT, DIM, Header } from "./theme.js";
 
-type Step = "pick" | "githubKey" | "githubDevice" | "gitlabKey";
+type Step = "pick" | "githubKey" | "githubDevice" | "gitlabKey" | "appId" | "appKey" | "appPick";
 
 function ghCliToken(): string | null {
   try {
@@ -62,6 +68,9 @@ export function Login({ onDone }: { onDone: () => void }) {
   const [input, setInput] = useState("");
   const [gitlabUrl] = useState(process.env.GITLAB_URL ?? "https://gitlab.com");
   const [device, setDevice] = useState<DeviceFlowStart | null>(null);
+  const [appId, setAppId] = useState("");
+  const [appPem, setAppPem] = useState("");
+  const [appInfo, setAppInfo] = useState<AppIdentity | null>(null);
 
   // OAuth device flow: request a code, poll until the user authorises.
   useEffect(() => {
@@ -112,6 +121,52 @@ export function Login({ onDone }: { onDone: () => void }) {
     onDone();
   };
 
+  // app sign-in, step 2: validate key + app id, list installations
+  const connectApp = async (keyPath: string) => {
+    setBusy("Validating GitHub App…");
+    try {
+      const pem = readPrivateKey(keyPath);
+      const info = await inspectApp(appId.trim(), pem);
+      setBusy(null);
+      if (info.installations.length === 0) {
+        setError(`app "${info.slug}" has no installations — install it on a repo/org first`);
+        setStep("pick");
+        return;
+      }
+      setAppPem(pem);
+      setError(null);
+      setInput("");
+      if (info.installations.length === 1) {
+        await finishApp(pem, info, info.installations[0]);
+        return;
+      }
+      setAppInfo(info);
+      setStep("appPick");
+    } catch (e) {
+      setBusy(null);
+      setError(e instanceof Error ? e.message : "app sign-in failed");
+      setStep("pick");
+    }
+  };
+
+  // app sign-in, final step: store key, mint installation token
+  const finishApp = async (
+    pem: string,
+    info: AppIdentity,
+    inst: AppIdentity["installations"][0],
+  ) => {
+    setBusy("Minting installation token…");
+    try {
+      await connectGithubApp(appId.trim(), pem, inst, info.slug);
+      setBusy(null);
+      onDone();
+    } catch (e) {
+      setBusy(null);
+      setError(e instanceof Error ? e.message : "app sign-in failed");
+      setStep("pick");
+    }
+  };
+
   if (busy) {
     return (
       <Box flexDirection="column">
@@ -143,12 +198,19 @@ export function Login({ onDone }: { onDone: () => void }) {
                   label: "Paste a GitHub personal access token",
                   value: "ghpat",
                 },
+                {
+                  label: "Sign in as a GitHub App (reviews post as a bot)",
+                  value: "app",
+                },
                 { label: "Connect GitLab (paste a token)", value: "gitlab" },
               ]}
               onSelect={(item) => {
                 if (item.value === "oauth") {
                   setError(null);
                   setStep("githubDevice");
+                } else if (item.value === "app") {
+                  setError(null);
+                  setStep("appId");
                 } else if (item.value === "gh") {
                   const token = ghCliToken();
                   if (token) void connectGithubToken(token);
@@ -203,6 +265,64 @@ export function Login({ onDone }: { onDone: () => void }) {
               onChange={setInput}
               mask="•"
               onSubmit={(v) => v.trim() && void connectGithubToken(v.trim())}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === "appId" && (
+        <Box flexDirection="column">
+          <Text bold>GitHub App id</Text>
+          <Text color={DIM}>
+            create an app under github.com/settings/apps — permissions: pull requests rw, contents
+            ro, issues rw · then install it on your repos
+          </Text>
+          <Box>
+            <Text color={ACCENT}>{"❯ "}</Text>
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={(v) => {
+                if (!v.trim()) return;
+                setAppId(v.trim());
+                setInput("");
+                setStep("appKey");
+              }}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === "appKey" && (
+        <Box flexDirection="column">
+          <Text bold>Private key path (.pem)</Text>
+          <Text color={DIM}>
+            app settings → private keys → generate — the key is copied into ~/.codeturtle
+          </Text>
+          <Box>
+            <Text color={ACCENT}>{"❯ "}</Text>
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={(v) => v.trim() && void connectApp(v.trim())}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {step === "appPick" && appInfo && (
+        <Box flexDirection="column">
+          <Text bold>Where should {appInfo.name} review?</Text>
+          <Box marginTop={1}>
+            <SelectInput
+              items={appInfo.installations.map((i) => ({
+                label: i.account,
+                value: String(i.id),
+              }))}
+              onSelect={(item) => {
+                const inst = appInfo.installations.find((i) => String(i.id) === item.value);
+                if (inst) void finishApp(appPem, appInfo, inst);
+              }}
             />
           </Box>
         </Box>

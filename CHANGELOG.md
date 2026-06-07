@@ -13,6 +13,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Node 22/24 CI test matrix.
 - Dashboard: PR lists auto-refresh in place on the watch cadence (raised/closed/merged
   PRs stay current), plus manual refresh (`R`) for instant updates.
+- GitHub App sign-in: reviews post as `<app-slug>[bot]` instead of the user. The CLI
+  signs an RS256 JWT with the app's private key and mints/refreshes installation
+  tokens locally — still no server, no webhooks. Key stored in `~/.codeturtle` (0600).
 
 ### Fixed
 

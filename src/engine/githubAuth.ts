@@ -188,10 +188,14 @@ export async function refreshGithubToken(): Promise<string | undefined> {
   }
 }
 
-/** Refresh-before-use entry point for the forge clients. Non-oauth creds fall
- * straight through to the normal sync resolution. */
+/** Refresh-before-use entry point for the forge clients. App credentials mint
+ * installation tokens; non-oauth creds fall through to sync resolution. */
 export async function ensureFreshGithubToken(): Promise<string | undefined> {
   const cred = loadCredentials().github;
+  if (cred?.method === "app") {
+    const { ensureFreshAppToken } = await import("./githubApp.js");
+    return (await ensureFreshAppToken()) ?? resolveToken("github");
+  }
   if (!cred || cred.method !== "oauth") return resolveToken("github");
   const expiring =
     cred.expires_at != null && cred.refresh_token && cred.expires_at - Date.now() < REFRESH_SKEW_MS;
