@@ -31,7 +31,7 @@ vi.mock("openai", () => ({
 }));
 
 // imported after the mock is registered
-const { review } = await import("../reviewer.js");
+const { review, describeModelError } = await import("../reviewer.js");
 
 const ctx: ContextBundle = { files: [], notes: [] };
 const norms: Norms = {
@@ -171,6 +171,11 @@ describe("review (hostile reviewer output)", () => {
     await expect(review("diff", ctx, norms)).rejects.toThrow("429");
   });
 
+  it("surfaces an actionable message when the model errors out", async () => {
+    h.errors = [429, 429, 429];
+    await expect(review("diff", ctx, norms)).rejects.toThrow(/quota|rate limit/i);
+  });
+
   it("strips response_format only on a 400-style rejection", async () => {
     h.errors = [400]; // first call (with response_format) rejected
     h.content = JSON.stringify({ findings: [], summary: "fallback ok" });
@@ -195,5 +200,27 @@ describe("review (hostile reviewer output)", () => {
   it("throws when no API key is configured for a non-local endpoint", async () => {
     delete process.env.REVIEWER_API_KEY; // default base url is the Gemini cloud endpoint
     await expect(review("diff", ctx, norms)).rejects.toThrow(/API key/i);
+  });
+});
+
+describe("describeModelError", () => {
+  it("includes model, status, provider detail, and a hint", () => {
+    const e = Object.assign(new Error("429 status code (no body)"), {
+      status: 429,
+      error: { message: "You exceeded your current quota" },
+    });
+    const out = describeModelError(e, "gemini-2.5-pro");
+    expect(out.message).toContain("gemini-2.5-pro");
+    expect(out.message).toContain("429");
+    expect(out.message).toContain("exceeded your current quota");
+    expect(out.message).toMatch(/billing|quota/);
+    expect((out as { status?: number }).status).toBe(429); // callers still branch on .status
+  });
+
+  it("falls back to a generic hint for 5xx and passes through non-API errors", () => {
+    const e = Object.assign(new Error("500 status code (no body)"), { status: 500 });
+    expect(describeModelError(e, "m").message).toMatch(/server error/);
+    const plain = new Error("boom");
+    expect(describeModelError(plain, "m")).toBe(plain);
   });
 });

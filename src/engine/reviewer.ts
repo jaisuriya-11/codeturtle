@@ -164,6 +164,36 @@ export function dedupeFindings(findings: Finding[]): Finding[] {
   return out;
 }
 
+/** Model/API error → actionable line. The SDK buries the provider's own
+ * explanation in e.error.message (when the body has one) and reports bare
+ * "<status> status code (no body)" otherwise — translate both into something
+ * the user can act on. Preserves .status so callers can still branch on it. */
+export function describeModelError(e: unknown, model: string): Error {
+  const status = (e as { status?: number })?.status;
+  if (typeof status !== "number") return e instanceof Error ? e : new Error(String(e));
+  const detail = (e as { error?: { message?: unknown } })?.error?.message;
+  const hints: Record<number, string> = {
+    400: "request rejected — check the model name and api key",
+    401: "api key rejected — re-run setup and paste a valid key for this provider",
+    403: "key not allowed to use this model — check key restrictions",
+    404: "model not found — check the model name in settings",
+    429: "rate limit or quota exhausted — free tiers often have little or no quota for pro models; switch to a cheaper model or add billing",
+  };
+  const hint =
+    hints[status] ??
+    (status >= 500
+      ? "provider server error — often hides a quota or billing problem; retry later or switch model"
+      : "");
+  const msg = [
+    `model ${model} returned ${status}`,
+    typeof detail === "string" && detail ? detail.slice(0, 200) : null,
+    hint || null,
+  ]
+    .filter(Boolean)
+    .join(" — ");
+  return Object.assign(new Error(msg), { status });
+}
+
 /** Retry transient model errors (rate limits, server hiccups) with backoff.
  * Honors Retry-After when the provider sends one. */
 async function createWithRetry(
@@ -181,8 +211,10 @@ async function createWithRetry(
       const retryAfter = Number(e?.headers?.["retry-after"]);
       const wait =
         Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 60_000) : delay;
+      const detail =
+        typeof e?.error?.message === "string" ? `: ${e.error.message.slice(0, 120)}` : "";
       log(
-        `model returned ${status}${status === 429 ? " (rate limited)" : ""} — retrying in ${Math.round(wait / 1000)}s`,
+        `model returned ${status}${status === 429 ? " (rate limited)" : ""}${detail} — retrying in ${Math.round(wait / 1000)}s`,
       );
       await new Promise((r) => setTimeout(r, wait));
       delay *= 3;
@@ -261,10 +293,12 @@ export async function review(
 
   // general pass failure is fatal (existing behaviour); focus passes are best-effort
   const [general, ...extras] = await Promise.all([
-    runPass(client, s.model, system, user, log),
+    runPass(client, s.model, system, user, log).catch((e) => {
+      throw describeModelError(e, s.model);
+    }),
     ...foci.map((f) =>
       runPass(client, s.model, `${system}\n\n${FOCUS_PROMPTS[f]}`, user, log).catch((e) => {
-        log(`${f} pass failed: ${e instanceof Error ? e.message : e}`);
+        log(`${f} pass failed: ${describeModelError(e, s.model).message}`);
         return { findings: [], summary: "" } as ReviewResult;
       }),
     ),
