@@ -44,6 +44,9 @@ export interface ReviewerConfig {
   /** review passes per run: 1 = single (default), 2 adds a security-only pass,
    * 3 adds a logic-only pass. More passes = better recall on small models. */
   passes?: number;
+  /** input-context budget per review, in tokens (diff + codebase context).
+   * Caps cost and keeps small-context models from overflowing. */
+  token_limit?: number;
 }
 
 export interface WatchConfig {
@@ -180,8 +183,28 @@ export function resetAll(): void {
   rmSync(join(HOME, "locks"), { recursive: true, force: true });
 }
 
-export const limits = {
-  maxDiffChars: Number(process.env.MAX_DIFF_CHARS ?? 40000),
-  maxContextFiles: Number(process.env.MAX_CONTEXT_FILES ?? 12),
-  maxContextChars: Number(process.env.MAX_CONTEXT_CHARS ?? 40000),
-};
+/** Default input-context budget per review (tokens). At ~4 chars/token this
+ * matches the previous fixed caps (40k diff chars + 40k context chars). */
+export const DEFAULT_TOKEN_LIMIT = 20000;
+
+/** Resolve the user's token limit: env > config > default. 0 means no limit
+ * (the diff and context are sent untruncated). */
+export function reviewTokenLimit(): number {
+  const raw = Number(process.env.REVIEWER_TOKEN_LIMIT ?? loadConfig().reviewer?.token_limit);
+  if (raw === 0) return 0;
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : DEFAULT_TOKEN_LIMIT;
+}
+
+/** Per-review budgets, derived from the token limit (split evenly between the
+ * diff and the context bundle at ~4 chars/token). The char/file env overrides
+ * still win for fine-grained control. A 0 token limit disables the char caps
+ * (the context file-count cap still applies). */
+export function reviewLimits() {
+  const limit = reviewTokenLimit();
+  const budgetChars = limit > 0 ? limit * 4 : Number.POSITIVE_INFINITY;
+  return {
+    maxDiffChars: Number(process.env.MAX_DIFF_CHARS ?? Math.floor(budgetChars / 2)),
+    maxContextFiles: Number(process.env.MAX_CONTEXT_FILES ?? 12),
+    maxContextChars: Number(process.env.MAX_CONTEXT_CHARS ?? Math.floor(budgetChars / 2)),
+  };
+}

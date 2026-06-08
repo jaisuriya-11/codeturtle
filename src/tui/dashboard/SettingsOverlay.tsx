@@ -3,30 +3,36 @@
 
 import { Box, Text } from "ink";
 import SelectInput from "ink-select-input";
-import React from "react";
+import TextInput from "ink-text-input";
+import React, { useState } from "react";
 
 import { loadConfig } from "../../engine/config.js";
-import { ACCENT, Header } from "../theme.js";
+import { ACCENT, DIM, Header } from "../theme.js";
 
-export type SettingsView = "settings" | "general" | "confirmReset";
+export type SettingsView = "settings" | "general" | "tokenLimit" | "confirmReset";
 
 export function SettingsOverlay({
   view,
   model,
   passes,
+  tokenLimit,
   onNavigate,
   onCyclePasses,
+  onSetTokenLimit,
   onQuit,
   onConfirmReset,
 }: {
   view: SettingsView;
   model: string;
   passes: number;
+  tokenLimit: number;
   onNavigate: (view: SettingsView | "none" | "model" | "repos") => void;
   onCyclePasses: () => void;
+  onSetTokenLimit: (limit: number) => void;
   onQuit: () => void;
   onConfirmReset: () => void;
 }) {
+  const [tokenInput, setTokenInput] = useState("");
   if (view === "confirmReset") {
     return (
       <Box flexDirection="column">
@@ -55,6 +61,37 @@ export function SettingsOverlay({
     );
   }
 
+  if (view === "tokenLimit") {
+    return (
+      <Box flexDirection="column">
+        <Header subtitle="Token limit" />
+        <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+          <Text bold>Token limit per review</Text>
+          <Text color={DIM}>
+            max input tokens (diff + codebase context) per review — current{" "}
+            {tokenLimit === 0 ? "no limit" : tokenLimit}, press enter to keep, {'"none"'} for no
+            limit
+          </Text>
+          <Box>
+            <Text color={ACCENT}>{"❯ "}</Text>
+            <TextInput
+              value={tokenInput}
+              onChange={setTokenInput}
+              onSubmit={(v) => {
+                const t = v.trim().toLowerCase();
+                const n = Number(t);
+                if (t === "none" || t === "0") onSetTokenLimit(0);
+                else if (t && Number.isFinite(n) && n > 0) onSetTokenLimit(Math.trunc(n));
+                setTokenInput("");
+                onNavigate("general");
+              }}
+            />
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
   if (view === "general") {
     const targets = loadConfig().watch?.targets ?? [];
     return (
@@ -69,12 +106,17 @@ export function SettingsOverlay({
                 label: `Review passes  (${passes} — ${passes === 1 ? "fast" : "thorough"})`,
                 value: "passes",
               },
+              {
+                label: `Token limit  (${tokenLimit === 0 ? "no limit" : `${tokenLimit} tokens/review`})`,
+                value: "tokenLimit",
+              },
               { label: `Auto-review repos  (${targets.length} watched)`, value: "repos" },
             ]}
             onSelect={(item) => {
               if (item.value === "back") onNavigate("settings");
               else if (item.value === "model") onNavigate("model");
               else if (item.value === "passes") onCyclePasses();
+              else if (item.value === "tokenLimit") onNavigate("tokenLimit");
               else onNavigate("repos");
             }}
           />

@@ -7,6 +7,7 @@ import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import React, { useEffect, useState } from "react";
 
+import { DEFAULT_TOKEN_LIMIT } from "../engine/config.js";
 import { detectLocalModels, PROVIDERS, type Provider } from "../engine/providers.js";
 import { ACCENT, DIM } from "./theme.js";
 
@@ -15,9 +16,11 @@ export interface ModelChoice {
   baseUrl: string;
   model: string;
   apiKey: string;
+  /** input-context budget per review, in tokens */
+  tokenLimit: number;
 }
 
-type Step = "provider" | "detecting" | "model" | "customModel" | "customUrl" | "key";
+type Step = "provider" | "detecting" | "model" | "customModel" | "customUrl" | "key" | "tokenLimit";
 
 export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void }) {
   const [step, setStep] = useState<Step>("provider");
@@ -30,6 +33,7 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
   const [rejectedKey, setRejectedKey] = useState<string | null>(null);
   const [checkingKey, setCheckingKey] = useState(false);
   const [localServerUp, setLocalServerUp] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
 
   useEffect(() => {
     if (step === "detecting" && provider) {
@@ -41,13 +45,20 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
     }
   }, [step, provider]);
 
+  // key accepted (or local, no key) → ask the review token budget last
   const finish = (apiKey: string) => {
+    setKey(apiKey);
+    setStep("tokenLimit");
+  };
+
+  const done = (tokenLimit: number) => {
     if (!provider) return;
     onDone({
       provider: provider.id,
       baseUrl: provider.id === "custom" ? customUrl : provider.baseUrl,
       model,
-      apiKey,
+      apiKey: key,
+      tokenLimit,
     });
   };
 
@@ -115,8 +126,8 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
   }
 
   function finishLocal(m: string) {
-    if (!provider) return;
-    onDone({ provider: provider.id, baseUrl: provider.baseUrl, model: m, apiKey: "" });
+    setModel(m);
+    finish("");
   }
 
   if (step === "customModel") {
@@ -165,6 +176,31 @@ export function ModelPicker({ onDone }: { onDone: (choice: ModelChoice) => void 
               if (!v.trim()) return;
               setCustomUrl(v.trim());
               setStep("customModel");
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (step === "tokenLimit") {
+    return (
+      <Box flexDirection="column">
+        <Text bold>Token limit per review</Text>
+        <Text color={DIM}>
+          max input tokens (diff + codebase context) sent to the model per review — press enter for{" "}
+          {DEFAULT_TOKEN_LIMIT}, or type {'"none"'} for no limit
+        </Text>
+        <Box>
+          <Text color={ACCENT}>{"❯ "}</Text>
+          <TextInput
+            value={tokenInput}
+            onChange={setTokenInput}
+            onSubmit={(v) => {
+              const t = v.trim().toLowerCase();
+              if (t === "none" || t === "0") return done(0);
+              const n = Number(t);
+              done(t && Number.isFinite(n) && n > 0 ? Math.trunc(n) : DEFAULT_TOKEN_LIMIT);
             }}
           />
         </Box>

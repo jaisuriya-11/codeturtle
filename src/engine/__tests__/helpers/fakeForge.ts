@@ -27,6 +27,7 @@ export interface FakeForge extends ForgeClient {
   created: string[];
   edited: { noteId: number | string; body: string }[];
   labels: string[];
+  removedLabels: string[];
   submitted: string[];
 }
 
@@ -41,6 +42,7 @@ export function makeFakeForge(opts: FakeForgeOptions = {}): FakeForge {
     created: [],
     edited: [],
     labels: [],
+    removedLabels: [],
     submitted: [],
 
     close: vi.fn(async () => {}),
@@ -93,6 +95,10 @@ export function makeFakeForge(opts: FakeForgeOptions = {}): FakeForge {
 
     addLabels: vi.fn(async (_p: string, _n: number, labels: string[]) => {
       fake.labels.push(...labels);
+    }),
+
+    removeLabels: vi.fn(async (_p: string, _n: number, labels: string[]) => {
+      fake.removedLabels.push(...labels);
     }),
 
     submitReview: vi.fn(async (_p: string, _n: number, body: string) => {

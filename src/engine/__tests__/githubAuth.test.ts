@@ -8,6 +8,7 @@ import {
   getGithubClientId,
   pollForToken,
   startDeviceFlow,
+  userHasAppInstallation,
 } from "../githubAuth.js";
 import { installFetch } from "./helpers/fetchMock.js";
 
@@ -161,5 +162,27 @@ describe("ensureFreshGithubToken", () => {
     });
     installFetch(() => ({ status: 401, json: { error: "bad_refresh" } }));
     expect(await ensureFreshGithubToken()).toBe("old");
+  });
+});
+
+describe("userHasAppInstallation", () => {
+  it("is true when the user can see an installation", async () => {
+    const { calls } = installFetch(() => ({ json: { total_count: 2, installations: [] } }));
+    expect(await userHasAppInstallation("tok")).toBe(true);
+    expect(calls[0].url).toContain("/user/installations");
+  });
+
+  it("is false when the app is installed nowhere", async () => {
+    installFetch(() => ({ json: { total_count: 0, installations: [] } }));
+    expect(await userHasAppInstallation("tok")).toBe(false);
+  });
+
+  it("is null when the check itself fails — callers must not hard-block", async () => {
+    installFetch(() => ({ status: 500, json: {} }));
+    expect(await userHasAppInstallation("tok")).toBe(null);
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("offline");
+    });
+    expect(await userHasAppInstallation("tok")).toBe(null);
   });
 });

@@ -312,6 +312,37 @@ export class GitHubMcpClient implements ForgeClient {
     );
   }
 
+  async removeLabels(projectId: string, prNumber: number, labels: string[]) {
+    const { owner, repo } = this.split(projectId);
+    // issue_write update replaces the set — read, drop ours, write back.
+    const cur = await this.call(
+      "issue_read",
+      {
+        method: "get",
+        owner,
+        repo,
+        issue_number: prNumber,
+      },
+      { soft: true },
+    );
+    const existing = (cur?.labels ?? [])
+      .map((l: any) => (typeof l === "string" ? l : l?.name))
+      .filter(Boolean) as string[];
+    const next = existing.filter((l) => !labels.includes(l));
+    if (next.length === existing.length) return; // nothing to remove
+    await this.call(
+      "issue_write",
+      {
+        method: "update",
+        owner,
+        repo,
+        issue_number: prNumber,
+        labels: next.sort(),
+      },
+      { soft: true },
+    );
+  }
+
   async listOpenPrs(projectId: string) {
     const { owner, repo } = this.split(projectId);
     const d = await this.call(
