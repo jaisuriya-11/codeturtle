@@ -223,7 +223,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 
 | Version    | Status      | Description                                                                                                                                                                                                         |
 | ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v2.0.0     | Stable      | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes.           |
+| v1.0.0     | Stable      | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes.           |
 | Unreleased | In progress | ESLint + Prettier with CI enforcement · npm publish via Trusted Publisher (OIDC, automatic provenance) · Node 22/24 CI matrix · Dashboard PR auto-refresh · GitHub App sign-in (reviews post as `<app-slug>[bot]`). |
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
