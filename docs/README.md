@@ -10,16 +10,17 @@ TUI or by polling watched repos.
 
 ## Read in this order
 
-| #   | Doc                                       | What you'll learn                                                     |
-| --- | ----------------------------------------- | --------------------------------------------------------------------- |
-| 1   | [Getting Started](./getting-started.md)   | Install, build, run, and do your first review                         |
-| 2   | [Architecture](./architecture.md)         | The big picture: layers, modules, and the review data flow            |
-| 3   | [Engine Reference](./engine-reference.md) | Every module in `src/engine/` — what it does and its public surface   |
-| 4   | [TUI Reference](./tui-reference.md)       | The React + Ink components in `src/tui/`                              |
-| 5   | [Configuration](./configuration.md)       | `~/.codeturtle` store, env vars, and per-repo `.codeturtle.yml` norms |
-| 6   | [Hard Invariants](./invariants.md)        | The seven rules you must not break — security, idempotency, locking   |
-| 7   | [Contributing](../CONTRIBUTING.md)        | Coding standards, verification steps, and the "do not" list           |
-| 8   | [Glossary](./glossary.md)                 | Domain terms: forge, norms, finding, context bundle, marker           |
+| #   | Doc                                           | What you'll learn                                                     |
+| --- | --------------------------------------------- | --------------------------------------------------------------------- |
+| 1   | [Getting Started](./getting-started.md)       | Install, build, run, and do your first review                         |
+| 2   | [Architecture](./architecture.md)             | The big picture: layers, modules, and the review data flow            |
+| 3   | [Engine Reference](./engine-reference.md)     | Every module in `src/engine/` — what it does and its public surface   |
+| 4   | [TUI Reference](./tui-reference.md)           | The React + Ink components in `src/tui/`                              |
+| 5   | [Configuration](./configuration.md)           | `~/.codeturtle` store, env vars, and per-repo `.codeturtle.yml` norms |
+| 6   | [Hard Invariants](./invariants.md)            | The seven rules you must not break — security, idempotency, locking   |
+| 7   | [Custom Norms Guide](./custom-norms-guide.md) | Layered norms: global + packs + code transforms, with examples        |
+| 8   | [Contributing](../CONTRIBUTING.md)            | Coding standards, verification steps, and the "do not" list           |
+| 9   | [Glossary](./glossary.md)                     | Domain terms: forge, norms, finding, context bundle, marker           |
 
 ## 30-second mental model
 

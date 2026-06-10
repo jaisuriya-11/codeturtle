@@ -60,10 +60,9 @@ It's not another SaaS bot. It's a single binary you install once, point at the m
 - **One native review per run** — inline comments + a single summary review (create → add → submit pending), with labels and dedup via hidden HTML markers.
 - **Idempotent re-reviews** — pushes only post new findings; markers carry a `±3 line tolerance` for LLM anchor jitter.
 - **Idempotent push reviews** — the same marker scheme works for commit comments on plain branch pushes, deduped per head commit.
-- **Custom norms** — drop a `.codeturtle.yml` in the target repo to tune guidelines, excludes, and confidence threshold. Reviewer/key overrides from repo files are **ignored for security**.
+- **Custom norms, layered** — built-in defaults ← your personal global norms ← the repo's `.codeturtle.yml` (project wins). Package reusable rule sets as **packs** (`.yml`) or, for power users, **code transforms** (`.mjs`); repos opt into packs by name via `extends`. Reviewer/key overrides and code execution from repo files are **ignored for security**. See the [Custom Norms Guide](docs/custom-norms-guide.md).
 - **GitHub App identity** — reviews can post as `<app-slug>[bot]` (RS256 JWT → installation token, all on your machine). Still no server.
-- **Watch + dashboard** — pick repos, get a live TUI: open/closed PR tabs, auto-watch, events feed, manual refresh.
-- **Daemon mode** — `codeturtle start` survives terminal close; `logs -f`, `status`, `stop` included.
+- **Watch + dashboard** — pick repos, get a live TUI: open/closed PR tabs, auto-watch, events feed, manual refresh (`R`). Watching runs inside the TUI session (a detached background daemon is on the [roadmap](#project-status)).
 - **Strict reviewer validation** — hostile LLM output is filtered, not trusted; findings below the configured confidence threshold are dropped before posting.
 
 ---
@@ -99,7 +98,7 @@ codeturtle          # opens the TUI — first run walks you through setup
 Then the dashboard watches your repos: every new PR and every push gets reviewed automatically. Inline comments + a summary review land on the PR, deduped across runs.
 
 ```
-🐢 Code Turtle v2.0 — local AI code reviewer
+🐢 Code Turtle v2.1 — local AI code reviewer
 
 ╭──────────────────────────────────────────────────────╮
 │ ⠧ watching · github:you/repo · every 60s             │
@@ -115,15 +114,20 @@ w pause watcher · m model · s setup · q quit
 
 ---
 
-## Scripting / Daemon
+## Scripting
+
+The bare command opens the TUI. For scripting there are three subcommands — `review`, `status`,
+and `reset`:
 
 ```bash
-codeturtle review --forge github --repo owner/repo --pr 42   # one-off review
-codeturtle start          # background daemon (survives terminal close)
-codeturtle logs -f
-codeturtle stop
-codeturtle status
+codeturtle review https://github.com/owner/repo/pull/42      # one-off review (paste a link)
+codeturtle review --forge github --repo owner/repo --pr 42   # …or pass flags
+codeturtle status                                            # connection + model status
+codeturtle reset                                             # wipe local config (-y to skip prompt)
 ```
+
+> A background daemon (`start` / `logs` / `stop`) is on the [roadmap](#project-status). Today,
+> background watching runs inside the TUI session.
 
 ---
 
@@ -131,7 +135,7 @@ codeturtle status
 
 - **Smart context**: not just the diff — pulls changed files, their imports, callers, and tests from the repo at the head commit
 - **GitHub via MCP**: all GitHub I/O goes through GitHub's official MCP server; findings post as one native PR review (inline comments + summary)
-- **Custom norms**: drop a `.codeturtle.yml` in the target repo to tune guidelines, excludes, confidence threshold (reviewer/key overrides from repo files are ignored for security)
+- **Custom norms, layered**: defaults ← your global norms & packs ← the repo's `.codeturtle.yml` (project wins); package rules as `.yml` packs or `.mjs` transforms (reviewer/key overrides and repo-triggered code are ignored for security) — see the [Custom Norms Guide](docs/custom-norms-guide.md)
 - **Idempotent**: re-reviews after a push only post new findings (±3 line tolerance for anchor jitter)
 
 ---
@@ -212,7 +216,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 **Good first contributions:**
 
 - Adding a new LLM provider preset in `src/engine/providers.ts`
-- Adding a new norm pack under `docs/`
+- Contributing an example norm pack or transform to the [Custom Norms Guide](docs/custom-norms-guide.md)
 - Improving TUI key hints or status badges
 - Writing missing tests in `src/**/__tests__/`
 - Documentation fixes
@@ -221,10 +225,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 
 ## Project Status
 
-| Version    | Status      | Description                                                                                                                                                                                                         |
-| ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v2.0.0     | Stable      | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes.           |
-| Unreleased | In progress | ESLint + Prettier with CI enforcement · npm publish via Trusted Publisher (OIDC, automatic provenance) · Node 22/24 CI matrix · Dashboard PR auto-refresh · GitHub App sign-in (reviews post as `<app-slug>[bot]`). |
+| Version    | Status  | Description                                                                                                                                                                                                                                        |
+| ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.1.0     | Stable  | Layered custom norms — personal **global** norms plus reusable **packs** (`.yml`) and **code transforms** (`.mjs`), with `extends` for per-repo opt-in. GitHub OAuth/App sign-in, push reviews, Vitest suite + invariant tests, CI + OIDC release. |
+| v2.0.0     | Stable  | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes.                                          |
+| Unreleased | Planned | Background daemon (`start` / `logs` / `stop`) · per-language norm packs auto-selected by file type · TUI manager for installed packs.                                                                                                              |
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 

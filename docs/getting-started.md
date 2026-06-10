@@ -148,4 +148,5 @@ asked to review. See the [Contributing "do not" list](../CONTRIBUTING.md#please-
 
 - Understand what happens during a review → [Architecture](./architecture.md)
 - Tune the reviewer per-repo → [Configuration › `.codeturtle.yml`](./configuration.md#per-repo-norms-codeturtleyml)
+- Build reusable review rules (global norms, packs, transforms) → [Custom Norms Guide](./custom-norms-guide.md)
 - Before you submit a change → [Contributing › Verify](../CONTRIBUTING.md#verification-checklist)
