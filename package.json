@@ -1,6 +1,6 @@
 {
   "name": "code-turtle",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Local AI code reviewer for GitHub & GitLab — any model, no cloud",
   "scripts": {
     "test": "vitest run",
@@ -31,6 +31,9 @@
   "author": "Jaisuriya P K",
   "license": "MIT",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "codeturtle": "dist/cli.js"
   },

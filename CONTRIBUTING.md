@@ -113,7 +113,8 @@ Some rules are **not** stylistic — breaking them is a bug. Please read the ful
     (`<!-- ct:f:FILE:LINE -->`, `<!-- ct:review -->`, `<!-- ct:status -->`). Dedup uses a ±3 line
     tolerance. Never post without a marker; never change marker formats; never remove the tolerance.
 2.  **Repo config is untrusted.** `norms.ts` strips `agent` and `key_ref` from a repo's
-    `.codeturtle.yml`. Never let repo files set URLs, keys, or commands.
+    `.codeturtle.yml`; a repo's `extends` resolves to installed packs by safe bare name only, and a
+    repo can never run a code transform. Never let repo files set URLs, keys, commands, or run code.
 3.  **Secrets stay in `~/.codeturtle/` (chmod 600).** Never log tokens/keys or write them elsewhere.
 4.  **The `~/.codeturtle` file shapes are a compatibility contract** — additive changes only.
 5.  **GitHub MCP has no comment-edit tool** — the summary posts as one review via the
