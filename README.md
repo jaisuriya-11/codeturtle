@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/code-turtle"><img src="https://img.shields.io/npm/v/code-turtle.svg?style=for-the-badge&logo=npm&logoColor=white" alt="npm version" /></a>
-  <a href="https://github.com/jaisuriya97/CodeTurtle/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jaisuriya97/turtle-code.svg?style=for-the-badge" alt="License" /></a>
+  <a href="https://github.com/jaisuriya97/CodeTurtle/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jaisuriya97/CodeTurtle.svg?style=for-the-badge" alt="License" /></a>
   <a href="https://github.com/jaisuriya97/CodeTurtle"><img src="https://img.shields.io/badge/node-%3E%3D22.12-339933.svg?style=for-the-badge&logo=node.js&logoColor=white" alt="Node Engine" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://github.com/jaisuriya97/CodeTurtle/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge" alt="PRs welcome" /></a>
@@ -19,11 +19,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jaisuriya97/turtle-code/stargazers"><img src="https://img.shields.io/github/stars/jaisuriya97/turtle-code.svg?style=flat-square" alt="Stars" /></a>
-  <a href="https://github.com/jaisuriya97/turtle-code/network/members"><img src="https://img.shields.io/github/forks/jaisuriya97/turtle-code.svg?style=flat-square" alt="Forks" /></a>
-  <a href="https://github.com/jaisuriya97/turtle-code/issues"><img src="https://img.shields.io/github/issues/jaisuriya97/turtle-code.svg?style=flat-square" alt="Issues" /></a>
-  <a href="https://github.com/jaisuriya97/turtle-code/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/keep--a--changelog-1.1.0-FF69B4.svg?style=flat-square" alt="Changelog" /></a>
-  <a href="https://github.com/jaisuriya97/turtle-code"><img src="https://img.shields.io/badge/local--first-100%25-6A1B9A.svg?style=flat-square" alt="Local-first" /></a>
+  <a href="https://github.com/jaisuriya97/CodeTurtle/stargazers"><img src="https://img.shields.io/github/stars/jaisuriya97/CodeTurtle.svg?style=flat-square" alt="Stars" /></a>
+  <a href="https://github.com/jaisuriya97/CodeTurtle/network/members"><img src="https://img.shields.io/github/forks/jaisuriya97/CodeTurtle.svg?style=flat-square" alt="Forks" /></a>
+  <a href="https://github.com/jaisuriya97/CodeTurtle/issues"><img src="https://img.shields.io/github/issues/jaisuriya97/CodeTurtle.svg?style=flat-square" alt="Issues" /></a>
+  <a href="https://github.com/jaisuriya97/CodeTurtle/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/keep--a--changelog-1.1.0-FF69B4.svg?style=flat-square" alt="Changelog" /></a>
+  <a href="https://github.com/jaisuriya97/CodeTurtle"><img src="https://img.shields.io/badge/local--first-100%25-6A1B9A.svg?style=flat-square" alt="Local-first" /></a>
 </p>
 
 ---
@@ -238,5 +238,3 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-</content>
-</invoke>
