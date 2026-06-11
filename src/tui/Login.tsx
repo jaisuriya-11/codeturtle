@@ -38,9 +38,25 @@ type Step =
 /** Best-effort browser open, per platform (darwin/win32/linux). Sign-in never
  * depends on it — every URL is also printed in the TUI. */
 function openUrl(url: string): void {
+  let safeUrl: string;
+  try {
+    const parsed = new URL(url);
+    // Only allow the expected GitHub device verification page over HTTPS.
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname !== "github.com" ||
+      parsed.pathname !== "/login/device"
+    ) {
+      return;
+    }
+    safeUrl = parsed.toString();
+  } catch {
+    return;
+  }
+
   const cmd =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const args = process.platform === "win32" ? ["/c", "start", "", safeUrl] : [safeUrl];
   try {
     spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
   } catch {
