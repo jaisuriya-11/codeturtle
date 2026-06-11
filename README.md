@@ -95,23 +95,6 @@ codeturtle          # opens the TUI — first run walks you through setup
 2. **Connect a forge (once)** — one menu: sign in with GitHub (OAuth device flow, set `GITHUB_CLIENT_ID`), use your `gh` CLI session, paste a GitHub PAT, or paste a GitLab token. One is enough; you can optionally connect another afterwards.
 3. **Pick repos to watch** — `github:owner/repo gitlab:12345`
 
-Then the dashboard watches your repos: every new PR and every push gets reviewed automatically. Inline comments + a summary review land on the PR, deduped across runs.
-
-```
-🐢 Code Turtle v2.1 — local AI code reviewer
-
-╭──────────────────────────────────────────────────────╮
-│ ⠧ watching · github:you/repo · every 60s             │
-│ github ✓ you · model gemini-2.5-flash                │
-╰──────────────────────────────────────────────────────╯
-
-8:02:52 pm  new PR github:you/repo#42 — queueing review
-
-w pause watcher · m model · s setup · q quit
-```
-
-**TUI key hints:** `w` pause watcher · `m` model · `s` setup · `q` quit
-
 ---
 
 ## Scripting
