@@ -88,7 +88,7 @@ describe("compareDiffs", () => {
 describe("listCommitCommentBodies", () => {
   it("reads GitHub bodies and GitLab notes", async () => {
     installFetch((url) =>
-      url.includes("api.github.com")
+      new URL(String(url)).hostname === "api.github.com"
         ? { json: [{ body: "gh comment" }] }
         : { json: [{ note: "gl comment" }] },
     );
