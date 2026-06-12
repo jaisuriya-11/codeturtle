@@ -28,6 +28,8 @@
 
 ---
 
+<img width="1152" height="720" alt="result" src="https://github.com/user-attachments/assets/5cf98f8f-a4b1-4e6f-a0e3-7cdd0652f4bf" />
+
 ## What is Code Turtle?
 
 **Code Turtle** (`codeturtle`) is an npm-distributed CLI/TUI that reviews GitHub PRs and GitLab MRs with any OpenAI-compatible LLM — cloud or local. There is **no server and no webhooks**: reviews run entirely on the user's machine, triggered by pasting a PR link in the TUI or by polling watched repos.
