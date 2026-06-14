@@ -1,7 +1,7 @@
 /** Reconstruct what a human reviewer would open: the changed files, their
  * imports, callers, and matching tests — read at the head commit. */
 
-import { limits } from "./config.js";
+import { reviewLimits } from "./config.js";
 import type { ForgeClient } from "./forge.js";
 import * as rf from "./repoFiles.js";
 import type { ContextBundle, ContextFile, FileDiff, Norms } from "./types.js";
@@ -12,7 +12,11 @@ const clip = (text: string, limit = 6000) =>
   text.length <= limit ? text : `${text.slice(0, limit)}\n… (truncated)`;
 
 export async function buildContext(
-  gl: ForgeClient, projectId: string, head: string, diffs: FileDiff[], _norms: Norms,
+  gl: ForgeClient,
+  projectId: string,
+  head: string,
+  diffs: FileDiff[],
+  _norms: Norms,
   log: (msg: string) => void = () => {},
 ): Promise<ContextBundle> {
   const files = new Map<string, ContextFile>();
@@ -73,11 +77,13 @@ export async function buildContext(
   }
 
   // rank + budget
+  const limits = reviewLimits();
   const ranked = [...files.values()].sort((a, b) => (RANK[a.reason] ?? 9) - (RANK[b.reason] ?? 9));
   const kept: ContextFile[] = [];
   let total = 0;
   for (const f of ranked) {
-    if (kept.length >= limits.maxContextFiles || total + f.content.length > limits.maxContextChars) break;
+    if (kept.length >= limits.maxContextFiles || total + f.content.length > limits.maxContextChars)
+      break;
     kept.push(f);
     total += f.content.length;
   }

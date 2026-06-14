@@ -8,10 +8,20 @@ export const STATUS_MARKER = "<!-- ct:status -->";
 export const REVIEW_MARKER = "<!-- ct:review -->";
 
 export const findingMarker = (file: string, line: number) => `<!-- ct:f:${file}:${line} -->`;
+// posted once per re-reviewed head commit that produced nothing new
+export const recheckMarker = (sha: string) => `<!-- ct:recheck:${sha} -->`;
 
 export interface Note {
   id: number | string | null;
   body: string;
+}
+
+/** Error → log line. undici buries the real reason ("fetch failed") in
+ * error.cause — surface it so network failures are diagnosable. */
+export function describeError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const cause = e.cause instanceof Error ? e.cause.message : e.cause ? String(e.cause) : "";
+  return cause && !e.message.includes(cause) ? `${e.message} (${cause})` : e.message;
 }
 
 export interface ForgeClient {
@@ -21,20 +31,31 @@ export interface ForgeClient {
   getFile(projectId: string, path: string, ref: string): Promise<string | null>;
   searchBlobs(projectId: string, query: string, ref: string): Promise<{ path: string }[]>;
   createNote(projectId: string, prNumber: number, body: string): Promise<number | string>;
-  editNote(projectId: string, prNumber: number, noteId: number | string, body: string): Promise<void>;
+  editNote(
+    projectId: string,
+    prNumber: number,
+    noteId: number | string,
+    body: string,
+  ): Promise<void>;
   listNotes(projectId: string, prNumber: number): Promise<Note[]>;
   postStatus(projectId: string, prNumber: number, body: string): Promise<number | string>;
   postInlineNote(
-    projectId: string, prNumber: number, filePath: string, newLine: number,
-    body: string, refs: DiffRefs,
+    projectId: string,
+    prNumber: number,
+    filePath: string,
+    newLine: number,
+    body: string,
+    refs: DiffRefs,
   ): Promise<boolean>;
   addLabels(projectId: string, prNumber: number, labels: string[]): Promise<void>;
+  removeLabels(projectId: string, prNumber: number, labels: string[]): Promise<void>;
   submitReview(projectId: string, prNumber: number, body: string): Promise<boolean>;
   listOpenPrs(projectId: string): Promise<{ iid: number; headSha: string }[]>;
 }
 
 async function http(
-  url: string, init: RequestInit & { headers: Record<string, string> },
+  url: string,
+  init: RequestInit & { headers: Record<string, string> },
 ): Promise<Response> {
   return fetch(url, { ...init, signal: AbortSignal.timeout(30000) });
 }
@@ -59,7 +80,10 @@ export class GitLabClient implements ForgeClient {
   }
 
   async getMr(projectId: string, prNumber: number): Promise<MrInfo> {
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}`, { headers: this.headers });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}`,
+      { headers: this.headers },
+    );
     if (!r.ok) throw new Error(`gitlab get_mr ${r.status}`);
     const d = (await r.json()) as any;
     return {
@@ -71,12 +95,18 @@ export class GitLabClient implements ForgeClient {
   }
 
   async getDiffs(projectId: string, prNumber: number): Promise<FileDiff[]> {
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/diffs`, { headers: this.headers });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/diffs`,
+      { headers: this.headers },
+    );
     if (!r.ok) throw new Error(`gitlab get_diffs ${r.status}`);
     const items = (await r.json()) as any[];
     return items.map((d) => ({
-      newPath: d.new_path, oldPath: d.old_path, diff: d.diff ?? "",
-      newFile: !!d.new_file, deletedFile: !!d.deleted_file,
+      newPath: d.new_path,
+      oldPath: d.old_path,
+      diff: d.diff ?? "",
+      newFile: !!d.new_file,
+      deletedFile: !!d.deleted_file,
     }));
   }
 
@@ -98,26 +128,35 @@ export class GitLabClient implements ForgeClient {
   }
 
   async createNote(projectId: string, prNumber: number, body: string) {
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/notes`, {
-      method: "POST",
-      headers: { ...this.headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
-    });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/notes`,
+      {
+        method: "POST",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      },
+    );
     if (!r.ok) throw new Error(`gitlab create_note ${r.status}`);
     return ((await r.json()) as any).id as number;
   }
 
   async editNote(projectId: string, prNumber: number, noteId: number | string, body: string) {
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/notes/${noteId}`, {
-      method: "PUT",
-      headers: { ...this.headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
-    });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/notes/${noteId}`,
+      {
+        method: "PUT",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      },
+    );
     if (!r.ok) throw new Error(`gitlab edit_note ${r.status}`);
   }
 
   async listNotes(projectId: string, prNumber: number): Promise<Note[]> {
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/notes?per_page=100`, { headers: this.headers });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/notes?per_page=100`,
+      { headers: this.headers },
+    );
     if (!r.ok) return [];
     return ((await r.json()) as any[]).map((n) => ({ id: n.id, body: n.body ?? "" }));
   }
@@ -134,8 +173,12 @@ export class GitLabClient implements ForgeClient {
   }
 
   async postInlineNote(
-    projectId: string, prNumber: number, filePath: string, newLine: number,
-    body: string, refs: DiffRefs,
+    projectId: string,
+    prNumber: number,
+    filePath: string,
+    newLine: number,
+    body: string,
+    refs: DiffRefs,
   ): Promise<boolean> {
     const params = new URLSearchParams({
       body,
@@ -147,11 +190,14 @@ export class GitLabClient implements ForgeClient {
       "position[old_path]": filePath,
       "position[new_line]": String(newLine),
     });
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/discussions`, {
-      method: "POST",
-      headers: { ...this.headers, "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}/discussions`,
+      {
+        method: "POST",
+        headers: { ...this.headers, "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      },
+    );
     return r.ok;
   }
 
@@ -163,12 +209,23 @@ export class GitLabClient implements ForgeClient {
     });
   }
 
+  async removeLabels(projectId: string, prNumber: number, labels: string[]) {
+    await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests/${prNumber}`, {
+      method: "PUT",
+      headers: { ...this.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ remove_labels: labels.join(",") }),
+    });
+  }
+
   async submitReview() {
     return false; // GitLab has no formal review object; poster falls back to sticky note
   }
 
   async listOpenPrs(projectId: string) {
-    const r = await http(`${this.base}/projects/${this.enc(projectId)}/merge_requests?state=opened&per_page=100`, { headers: this.headers });
+    const r = await http(
+      `${this.base}/projects/${this.enc(projectId)}/merge_requests?state=opened&per_page=100`,
+      { headers: this.headers },
+    );
     if (!r.ok) return [];
     return ((await r.json()) as any[])
       .filter((mr) => mr && (mr.state === "opened" || !mr.state))
@@ -193,7 +250,9 @@ export class GitHubRestClient implements ForgeClient {
   async close() {}
 
   async getMr(projectId: string, prNumber: number): Promise<MrInfo> {
-    const r = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}`, { headers: this.headers });
+    const r = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}`, {
+      headers: this.headers,
+    });
     if (!r.ok) throw new Error(`github get_mr ${r.status}`);
     const d = (await r.json()) as any;
     return {
@@ -205,11 +264,16 @@ export class GitHubRestClient implements ForgeClient {
   }
 
   async getDiffs(projectId: string, prNumber: number): Promise<FileDiff[]> {
-    const r = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}/files?per_page=100`, { headers: this.headers });
+    const r = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}/files?per_page=100`, {
+      headers: this.headers,
+    });
     if (!r.ok) throw new Error(`github get_diffs ${r.status}`);
     return ((await r.json()) as any[]).map((f) => ({
-      newPath: f.filename, oldPath: f.previous_filename ?? f.filename,
-      diff: f.patch ?? "", newFile: f.status === "added", deletedFile: f.status === "removed",
+      newPath: f.filename,
+      oldPath: f.previous_filename ?? f.filename,
+      diff: f.patch ?? "",
+      newFile: f.status === "added",
+      deletedFile: f.status === "removed",
     }));
   }
 
@@ -257,7 +321,8 @@ export class GitHubRestClient implements ForgeClient {
       `${this.base}/repos/${projectId}/pulls/${prNumber}/comments?per_page=100`,
     ]) {
       const r = await http(url, { headers: this.headers });
-      if (r.ok) for (const c of (await r.json()) as any[]) out.push({ id: c.id, body: c.body ?? "" });
+      if (r.ok)
+        for (const c of (await r.json()) as any[]) out.push({ id: c.id, body: c.body ?? "" });
     }
     return out;
   }
@@ -274,14 +339,22 @@ export class GitHubRestClient implements ForgeClient {
   }
 
   async postInlineNote(
-    projectId: string, prNumber: number, filePath: string, newLine: number,
-    body: string, refs: DiffRefs,
+    projectId: string,
+    prNumber: number,
+    filePath: string,
+    newLine: number,
+    body: string,
+    refs: DiffRefs,
   ): Promise<boolean> {
     const r = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}/comments`, {
       method: "POST",
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify({
-        body, commit_id: refs.head_sha, path: filePath, line: newLine, side: "RIGHT",
+        body,
+        commit_id: refs.head_sha,
+        path: filePath,
+        line: newLine,
+        side: "RIGHT",
       }),
     });
     return r.ok;
@@ -295,17 +368,33 @@ export class GitHubRestClient implements ForgeClient {
     });
   }
 
+  async removeLabels(projectId: string, prNumber: number, labels: string[]) {
+    // 404 per label (not present) is fine — removal is best-effort
+    for (const l of labels) {
+      await http(
+        `${this.base}/repos/${projectId}/issues/${prNumber}/labels/${encodeURIComponent(l)}`,
+        { method: "DELETE", headers: this.headers },
+      );
+    }
+  }
+
   async submitReview(projectId: string, prNumber: number, body: string): Promise<boolean> {
     const full = `${REVIEW_MARKER}\n${body}`;
-    const list = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}/reviews?per_page=100`, { headers: this.headers });
+    const list = await http(
+      `${this.base}/repos/${projectId}/pulls/${prNumber}/reviews?per_page=100`,
+      { headers: this.headers },
+    );
     if (list.ok) {
       for (const rv of (await list.json()) as any[]) {
         if ((rv.body ?? "").includes(REVIEW_MARKER)) {
-          const upd = await http(`${this.base}/repos/${projectId}/pulls/${prNumber}/reviews/${rv.id}`, {
-            method: "PUT",
-            headers: { ...this.headers, "Content-Type": "application/json" },
-            body: JSON.stringify({ body: full }),
-          });
+          const upd = await http(
+            `${this.base}/repos/${projectId}/pulls/${prNumber}/reviews/${rv.id}`,
+            {
+              method: "PUT",
+              headers: { ...this.headers, "Content-Type": "application/json" },
+              body: JSON.stringify({ body: full }),
+            },
+          );
           if (upd.ok) return true;
         }
       }
@@ -319,7 +408,9 @@ export class GitHubRestClient implements ForgeClient {
   }
 
   async listOpenPrs(projectId: string) {
-    const r = await http(`${this.base}/repos/${projectId}/pulls?state=open&per_page=100`, { headers: this.headers });
+    const r = await http(`${this.base}/repos/${projectId}/pulls?state=open&per_page=100`, {
+      headers: this.headers,
+    });
     if (!r.ok) return [];
     return ((await r.json()) as any[])
       .filter((pr) => pr && (pr.state === "open" || !pr.state))
@@ -342,4 +433,16 @@ export async function getForgeClient(forge: string): Promise<ForgeClient> {
   }
   if (forge === "gitlab") return new GitLabClient();
   throw new Error(`Unknown or unsupported forge: ${forge} (bitbucket lands in v2.1)`);
+}
+
+/** REST client regardless of GITHUB_BACKEND — push reviews need file reads
+ * alongside the commit APIs (forgeCommits.ts), which MCP doesn't expose. */
+export async function getRestForgeClient(forge: string): Promise<ForgeClient> {
+  if (forge === "github") {
+    const { ensureFreshGithubToken } = await import("./githubAuth.js");
+    await ensureFreshGithubToken();
+    return new GitHubRestClient();
+  }
+  if (forge === "gitlab") return new GitLabClient();
+  throw new Error(`Unknown or unsupported forge: ${forge}`);
 }

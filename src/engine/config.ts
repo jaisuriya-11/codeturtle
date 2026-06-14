@@ -6,21 +6,33 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { RawNorms } from "./types.js";
+
 export const HOME = process.env.CODETURTLE_HOME ?? join(homedir(), ".codeturtle");
 const CRED_PATH = join(HOME, "credentials.json");
 const CONFIG_PATH = join(HOME, "config.json");
 export const LOG_FILE = join(HOME, "watcher.log");
 export const PID_FILE = join(HOME, "watcher.pid");
+/** GitHub App private key (PEM), copied here on app sign-in. chmod 600. */
+export const GITHUB_APP_KEY_PATH = join(HOME, "github-app.pem");
+
+/** Where global norm packs (*.yml) and code transforms (*.mjs) live. Same trust
+ * boundary as the rest of the store — dropping a file here is like installing a plugin. */
+export function normsDir(): string {
+  return join(HOME, "norms");
+}
 
 export interface ForgeCred {
   token?: string;
-  method?: string; // "pat" | "gh" | "oauth"
+  method?: string; // "pat" | "gh" | "oauth" | "app"
   user?: string;
   url?: string;
   backend?: "mcp" | "rest";
   refresh_token?: string; // oauth device flow — refresh grant
-  expires_at?: number; // oauth — access-token expiry, ms epoch
+  expires_at?: number; // oauth/app — access-token expiry, ms epoch
   client_id?: string; // oauth — the app client id used to obtain/refresh the token
+  app_id?: string; // app — GitHub App id (public)
+  installation_id?: number; // app — installation the token is minted for
 }
 
 export interface ReviewerConfig {
@@ -29,6 +41,12 @@ export interface ReviewerConfig {
   base_url?: string;
   model?: string;
   bot_name?: string;
+  /** review passes per run: 1 = single (default), 2 adds a security-only pass,
+   * 3 adds a logic-only pass. More passes = better recall on small models. */
+  passes?: number;
+  /** input-context budget per review, in tokens (diff + codebase context).
+   * Caps cost and keeps small-context models from overflowing. */
+  token_limit?: number;
 }
 
 export interface WatchConfig {
@@ -36,9 +54,17 @@ export interface WatchConfig {
   interval?: number;
 }
 
+/** Global (user-level) review norms. A personal baseline applied to every repo, plus
+ * `use`: names of packs/transforms in `~/.codeturtle/norms/` to activate globally.
+ * Layers below the repo's own `.codeturtle.yml` (project overrides global). */
+export interface NormsConfig extends RawNorms {
+  use?: string[];
+}
+
 export interface AppConfig {
   reviewer?: ReviewerConfig;
   watch?: WatchConfig;
+  norms?: NormsConfig;
 }
 
 function readJson<T>(path: string): T {
@@ -76,6 +102,11 @@ export function resolveToken(forge: string): string | undefined {
   return loadCredentials()[forge]?.token ?? process.env[ENV_TOKEN[forge] ?? ""];
 }
 
+/** True when any forge token exists (file or env) — the TUI login gate. */
+export function hasForgeCredentials(): boolean {
+  return !!(resolveToken("github") ?? resolveToken("gitlab"));
+}
+
 export function loadConfig(): AppConfig {
   return readJson(CONFIG_PATH);
 }
@@ -91,6 +122,7 @@ export interface ReviewerSettings {
   baseUrl: string;
   model: string;
   botName: string;
+  passes: number;
 }
 
 export function getBotName(model: string, customBotName?: string): string {
@@ -110,6 +142,7 @@ export function reviewerSettings(): ReviewerSettings {
   const apiKey = process.env.REVIEWER_API_KEY ?? process.env.GEMINI_API_KEY ?? cfg.api_key ?? "";
   const model = process.env.REVIEWER_MODEL ?? cfg.model ?? "gemini-2.5-flash";
   const botName = process.env.REVIEWER_BOT_NAME ?? cfg.bot_name ?? getBotName(model);
+  const rawPasses = Number(process.env.REVIEWER_PASSES ?? cfg.passes ?? 1);
   return {
     apiKey,
     baseUrl:
@@ -118,19 +151,60 @@ export function reviewerSettings(): ReviewerSettings {
       "https://generativelanguage.googleapis.com/v1beta/openai/",
     model,
     botName,
+    passes: Number.isFinite(rawPasses) ? Math.max(1, Math.min(3, Math.trunc(rawPasses))) : 1,
   };
+}
+
+/** True when a reviewer model is usable: an api key, or a local base url. */
+export function reviewerConfigured(): boolean {
+  const s = reviewerSettings();
+  return !!s.apiKey || s.baseUrl.includes("localhost");
+}
+
+/** Sign out: drop forge credentials, watched repos, and the reviewer/model
+ * config (so the next sign-in walks through model setup again). Keeps the
+ * github OAuth client id — public, reused on next sign-in. */
+export function resetLogin(): void {
+  const clientId = loadCredentials().github?.client_id;
+  rmSync(CRED_PATH, { force: true });
+  rmSync(GITHUB_APP_KEY_PATH, { force: true });
+  if (clientId) writeJson(CRED_PATH, { github: { client_id: clientId } });
+  const cfg = loadConfig();
+  delete cfg.reviewer;
+  if (cfg.watch) cfg.watch = { ...cfg.watch, targets: [] };
+  writeJson(CONFIG_PATH, cfg);
 }
 
 /** Wipe all local config: credentials, settings, logs, pid, locks. */
 export function resetAll(): void {
-  for (const f of [CRED_PATH, CONFIG_PATH, LOG_FILE, PID_FILE]) {
+  for (const f of [CRED_PATH, CONFIG_PATH, LOG_FILE, PID_FILE, GITHUB_APP_KEY_PATH]) {
     rmSync(f, { force: true });
   }
   rmSync(join(HOME, "locks"), { recursive: true, force: true });
 }
 
-export const limits = {
-  maxDiffChars: Number(process.env.MAX_DIFF_CHARS ?? 40000),
-  maxContextFiles: Number(process.env.MAX_CONTEXT_FILES ?? 12),
-  maxContextChars: Number(process.env.MAX_CONTEXT_CHARS ?? 40000),
-};
+/** Default input-context budget per review (tokens). At ~4 chars/token this
+ * matches the previous fixed caps (40k diff chars + 40k context chars). */
+export const DEFAULT_TOKEN_LIMIT = 20000;
+
+/** Resolve the user's token limit: env > config > default. 0 means no limit
+ * (the diff and context are sent untruncated). */
+export function reviewTokenLimit(): number {
+  const raw = Number(process.env.REVIEWER_TOKEN_LIMIT ?? loadConfig().reviewer?.token_limit);
+  if (raw === 0) return 0;
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : DEFAULT_TOKEN_LIMIT;
+}
+
+/** Per-review budgets, derived from the token limit (split evenly between the
+ * diff and the context bundle at ~4 chars/token). The char/file env overrides
+ * still win for fine-grained control. A 0 token limit disables the char caps
+ * (the context file-count cap still applies). */
+export function reviewLimits() {
+  const limit = reviewTokenLimit();
+  const budgetChars = limit > 0 ? limit * 4 : Number.POSITIVE_INFINITY;
+  return {
+    maxDiffChars: Number(process.env.MAX_DIFF_CHARS ?? Math.floor(budgetChars / 2)),
+    maxContextFiles: Number(process.env.MAX_CONTEXT_FILES ?? 12),
+    maxContextChars: Number(process.env.MAX_CONTEXT_CHARS ?? Math.floor(budgetChars / 2)),
+  };
+}

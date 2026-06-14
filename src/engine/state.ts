@@ -8,9 +8,12 @@ const latestCommit = new Map<string, string>();
 const locks = new Map<string, number>();
 
 const EVENT_TTL_MS = 60 * 60 * 1000;
-const LOCK_TTL_MS = 10 * 60 * 1000;
+// generous: local multi-pass models can run >10 min — an expired lock mid-run
+// lets a second run start and double-post. TTL only guards crashed processes.
+const LOCK_TTL_MS = 30 * 60 * 1000;
 
-const key = (projectId: string, prNumber: number) => `${projectId}#${prNumber}`;
+// ref: a PR number, or a `branch:<name>` string for push reviews
+const key = (projectId: string, ref: number | string) => `${projectId}#${ref}`;
 
 function getLockPath(k: string): string {
   const dir = join(HOME, "locks");
@@ -29,17 +32,25 @@ export function seenEvent(uuid: string | null | undefined): boolean {
   return false;
 }
 
-export function recordLatest(projectId: string, prNumber: number, headSha: string | null): void {
+export function recordLatest(
+  projectId: string,
+  prNumber: number | string,
+  headSha: string | null,
+): void {
   if (headSha) latestCommit.set(key(projectId, prNumber), headSha);
 }
 
-export function isLatest(projectId: string, prNumber: number, headSha: string | null): boolean {
+export function isLatest(
+  projectId: string,
+  prNumber: number | string,
+  headSha: string | null,
+): boolean {
   if (!headSha) return true;
   const latest = latestCommit.get(key(projectId, prNumber));
   return latest == null || latest === headSha;
 }
 
-export function acquireLock(projectId: string, prNumber: number): boolean {
+export function acquireLock(projectId: string, prNumber: number | string): boolean {
   const k = key(projectId, prNumber);
   const now = Date.now();
 
@@ -71,7 +82,7 @@ export function acquireLock(projectId: string, prNumber: number): boolean {
   }
 }
 
-export function releaseLock(projectId: string, prNumber: number): void {
+export function releaseLock(projectId: string, prNumber: number | string): void {
   const k = key(projectId, prNumber);
   locks.delete(k);
   const path = getLockPath(k);
@@ -81,4 +92,3 @@ export function releaseLock(projectId: string, prNumber: number): void {
     }
   } catch {}
 }
-

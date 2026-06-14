@@ -69,16 +69,18 @@ export const PROVIDERS: Provider[] = [
   },
 ];
 
-/** Live-detect models on a local OpenAI-compatible server (Ollama, LM Studio). */
-export async function detectLocalModels(baseUrl: string): Promise<string[]> {
+/** Live-detect models on a local OpenAI-compatible server (Ollama, LM Studio).
+ * null = server unreachable; [] = server up but no models installed (e.g. a
+ * fresh Ollama before any `ollama pull`) — callers should word these apart. */
+export async function detectLocalModels(baseUrl: string): Promise<string[] | null> {
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, "")}/models`, {
       signal: AbortSignal.timeout(2000),
     });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { data?: { id: string }[] };
+    if (!res.ok) return null;
+    const data = (await res.json()) as { data?: { id: string }[] | null };
     return (data.data ?? []).map((m) => m.id);
   } catch {
-    return [];
+    return null;
   }
 }

@@ -1,17 +1,39 @@
 {
   "name": "code-turtle",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Local AI code reviewer for GitHub & GitLab — any model, no cloud",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
     "build": "tsup",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "tsup",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm test"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "code-review",
+    "ai",
+    "llm",
+    "github",
+    "gitlab",
+    "pull-request",
+    "merge-request",
+    "cli",
+    "tui",
+    "local-first",
+    "openai"
+  ],
+  "author": "Jaisuriya P K",
   "license": "MIT",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "codeturtle": "dist/cli.js"
   },
@@ -28,19 +50,35 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.16",
+    "@vitest/coverage-v8": "^4.1.8",
+    "eslint": "^10.4.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "ink-testing-library": "^4.0.0",
+    "prettier": "^3.8.3",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.1",
+    "vitest": "^4.1.8"
   },
   "files": [
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12.0"
   },
   "allowScripts": {
     "esbuild@0.27.7": true
+  },
+  "homepage": "https://github.com/jaisuriya97/turtle-code#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaisuriya97/turtle-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jaisuriya97/turtle-code/issues"
   }
 }

@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
-import React, { useEffect, useState } from "react";
-import { fetchCodeSnippet, fetchPRReview, type ParsedFinding, type PRReviewData } from "../engine/viewer.js";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { fetchCodeSnippet, fetchPRReview, type PRReviewData } from "../engine/viewer.js";
 import type { Forge } from "../engine/types.js";
 import { ACCENT, DIM, Header } from "./theme.js";
 
@@ -17,19 +17,39 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PRReviewData | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [codeSnippet, setCodeSnippet] = useState<{ lines: string[]; startLine: number } | null>(null);
+  const [codeSnippet, setCodeSnippet] = useState<{ lines: string[]; startLine: number } | null>(
+    null,
+  );
   const [loadingSnippet, setLoadingSnippet] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [fileFilter, setFileFilter] = useState<string | null>(null);
+
+  const files = useMemo(() => [...new Set((data?.findings ?? []).map((f) => f.file))], [data]);
+  const findings = useMemo(
+    () =>
+      fileFilter
+        ? (data?.findings ?? []).filter((f) => f.file === fileFilter)
+        : (data?.findings ?? []),
+    [data, fileFilter],
+  );
+
+  const [refreshTick, setRefreshTick] = useState(0);
+  const hasData = useRef(false);
 
   useEffect(() => {
     let active = true;
     async function load() {
-      setLoading(true);
+      // background refreshes keep the current view — spinner only before first data
+      if (!hasData.current) setLoading(true);
       setError(null);
       try {
         const res = await fetchPRReview(forge, projectId, prNumber);
         if (!active) return;
+        hasData.current = true;
         setData(res);
+        // the review may have changed under us — drop a stale filter, clamp the cursor
+        setFileFilter((prev) => (prev && !res.findings.some((f) => f.file === prev) ? null : prev));
+        setActiveIndex((i) => Math.min(i, Math.max(0, res.findings.length - 1)));
         if (res.findings.length === 0) {
           setShowSummary(true);
         }
@@ -44,14 +64,20 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     return () => {
       active = false;
     };
-  }, [forge, projectId, prNumber]);
+  }, [forge, projectId, prNumber, refreshTick]);
+
+  // new pushes re-review while this screen is open — poll for fresh comments
+  useEffect(() => {
+    const t = setInterval(() => setRefreshTick((x) => x + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
-    if (!data || data.findings.length === 0 || showSummary) {
+    if (findings.length === 0 || showSummary) {
       setCodeSnippet(null);
       return;
     }
-    const finding = data.findings[activeIndex];
+    const finding = findings[activeIndex];
     if (!finding) return;
 
     let active = true;
@@ -72,11 +98,15 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     return () => {
       active = false;
     };
-  }, [data, activeIndex, showSummary, forge, projectId, prNumber]);
+  }, [findings, activeIndex, showSummary, forge, projectId, prNumber]);
 
   useInput((input, key) => {
     if (key.escape || input === "q") {
       onBack();
+      return;
+    }
+    if (input === "r") {
+      setRefreshTick((x) => x + 1);
       return;
     }
     if (!data) return;
@@ -88,11 +118,19 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       return;
     }
 
-    if (data.findings.length > 0 && !showSummary) {
+    // cycle the file filter: all → file1 → file2 → … → all
+    if (input === "f" && files.length > 1) {
+      const idx = fileFilter ? files.indexOf(fileFilter) : -1;
+      setFileFilter(idx + 1 >= files.length ? null : files[idx + 1]);
+      setActiveIndex(0);
+      return;
+    }
+
+    if (findings.length > 0 && !showSummary) {
       if (input === "j" || key.downArrow) {
-        setActiveIndex((prev) => (prev + 1) % data.findings.length);
+        setActiveIndex((prev) => (prev + 1) % findings.length);
       } else if (input === "k" || key.upArrow) {
-        setActiveIndex((prev) => (prev - 1 + data.findings.length) % data.findings.length);
+        setActiveIndex((prev) => (prev - 1 + findings.length) % findings.length);
       }
     }
   });
@@ -109,7 +147,11 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
         </Box>
         <Box marginTop={2} borderStyle="round" borderColor={DIM} paddingX={1}>
           <Text color={DIM}>
-            Press <Text color={ACCENT} bold>q/esc</Text> to cancel and go back
+            Press{" "}
+            <Text color={ACCENT} bold>
+              q/esc
+            </Text>{" "}
+            to cancel and go back
           </Text>
         </Box>
       </Box>
@@ -121,11 +163,21 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       <Box flexDirection="column" padding={1}>
         <Header subtitle={`Review fetch error for ${projectId}#${prNumber}`} />
         <Box marginTop={1}>
-          <Text color="red" bold>Error: {error}</Text>
+          <Text color="red" bold>
+            Error: {error}
+          </Text>
         </Box>
         <Box marginTop={2} borderStyle="round" borderColor={DIM} paddingX={1}>
           <Text color={DIM}>
-            Press <Text color={ACCENT} bold>q/esc</Text> to go back
+            Press{" "}
+            <Text color={ACCENT} bold>
+              r
+            </Text>{" "}
+            to retry ·{" "}
+            <Text color={ACCENT} bold>
+              q/esc
+            </Text>{" "}
+            to go back
           </Text>
         </Box>
       </Box>
@@ -141,14 +193,22 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
         </Box>
         <Box marginTop={2} borderStyle="round" borderColor={DIM} paddingX={1}>
           <Text color={DIM}>
-            Press <Text color={ACCENT} bold>q/esc</Text> to go back
+            Press{" "}
+            <Text color={ACCENT} bold>
+              r
+            </Text>{" "}
+            to refresh ·{" "}
+            <Text color={ACCENT} bold>
+              q/esc
+            </Text>{" "}
+            to go back
           </Text>
         </Box>
       </Box>
     );
   }
 
-  const activeFinding = data.findings.length > 0 ? data.findings[activeIndex] : null;
+  const activeFinding = findings.length > 0 ? findings[activeIndex] : null;
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -156,21 +216,39 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
 
       {/* TOP PANE: Overall Summary OR Code Snippet + Finding Detail */}
       {showSummary || !activeFinding ? (
-        <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column" minHeight={12}>
-          <Text bold color={ACCENT}>Overall Review Summary</Text>
+        <Box
+          borderStyle="round"
+          borderColor={ACCENT}
+          paddingX={1}
+          flexDirection="column"
+          minHeight={12}
+        >
+          <Text bold color={ACCENT}>
+            Overall Review Summary
+          </Text>
           <Box marginTop={1} flexDirection="column">
             {data.summary ? (
               <Text>{data.summary}</Text>
             ) : (
-              <Text color={DIM}>No review summary text available. View individual findings instead.</Text>
+              <Text color={DIM}>
+                No review summary text available. View individual findings instead.
+              </Text>
             )}
           </Box>
         </Box>
       ) : (
         <Box flexDirection="column">
           {/* Code Context */}
-          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column" minHeight={8}>
-            <Text bold color={ACCENT}>Code Context: {activeFinding.file}:{activeFinding.line}</Text>
+          <Box
+            borderStyle="round"
+            borderColor={ACCENT}
+            paddingX={1}
+            flexDirection="column"
+            minHeight={8}
+          >
+            <Text bold color={ACCENT}>
+              Code Context: {activeFinding.file}:{activeFinding.line}
+            </Text>
             {loadingSnippet ? (
               <Box marginTop={1}>
                 <Text color={ACCENT}>
@@ -190,8 +268,8 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
                       activeFinding.severity === "critical"
                         ? "red"
                         : activeFinding.severity === "warning"
-                        ? "yellow"
-                        : "cyan";
+                          ? "yellow"
+                          : "cyan";
                   }
                   return (
                     <Text key={idx} color={lineColor} bold={isTarget}>
@@ -218,8 +296,8 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
                   activeFinding.severity === "critical"
                     ? "red"
                     : activeFinding.severity === "warning"
-                    ? "yellow"
-                    : "cyan"
+                      ? "yellow"
+                      : "cyan"
                 }
               >
                 [{activeFinding.severity.toUpperCase()}] {activeFinding.title}
@@ -235,7 +313,9 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
               <Text>{activeFinding.comment}</Text>
               {activeFinding.suggestedCode && (
                 <Box flexDirection="column" marginTop={1}>
-                  <Text color="green" bold>Suggested Replacement:</Text>
+                  <Text color="green" bold>
+                    Suggested Replacement:
+                  </Text>
                   <Box borderStyle="single" borderColor="green" paddingX={1} marginTop={1}>
                     <Text color="green">{activeFinding.suggestedCode}</Text>
                   </Box>
@@ -243,7 +323,9 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
               )}
               {activeFinding.suggestion && !activeFinding.suggestedCode && (
                 <Box flexDirection="column" marginTop={1}>
-                  <Text color="yellow" bold>Suggestion:</Text>
+                  <Text color="yellow" bold>
+                    Suggestion:
+                  </Text>
                   <Text>{activeFinding.suggestion}</Text>
                 </Box>
               )}
@@ -253,25 +335,27 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       )}
 
       {/* BOTTOM PANE: Scrollable Findings List (Quickfix style) */}
-      {data.findings.length > 0 && (
+      {findings.length > 0 && (
         <Box borderStyle="round" borderColor={DIM} paddingX={1} flexDirection="column">
           <Text bold color={DIM}>
-            Findings List ({activeIndex + 1}/{data.findings.length})
+            Findings List ({activeIndex + 1}/{findings.length})
+            {fileFilter ? <Text color={ACCENT}> · file: {fileFilter}</Text> : null}
           </Text>
           <Box flexDirection="column" marginTop={1}>
             {(() => {
               const maxVisible = 5;
               let start = Math.max(0, activeIndex - Math.floor(maxVisible / 2));
-              let end = Math.min(data.findings.length, start + maxVisible);
+              const end = Math.min(findings.length, start + maxVisible);
               if (end - start < maxVisible) {
                 start = Math.max(0, end - maxVisible);
               }
-              return data.findings.slice(start, end).map((f, idx) => {
+              return findings.slice(start, end).map((f, idx) => {
                 const actualIdx = start + idx;
                 const isActive = actualIdx === activeIndex;
                 const prefix = isActive ? "❯ " : "  ";
                 const color = isActive ? ACCENT : DIM;
-                const severityEmoji = f.severity === "critical" ? "🛑" : f.severity === "warning" ? "⚠️" : "💡";
+                const severityEmoji =
+                  f.severity === "critical" ? "🛑" : f.severity === "warning" ? "⚠️" : "💡";
 
                 return (
                   <Text key={actualIdx} color={color} bold={isActive}>
@@ -287,15 +371,38 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       {/* Keyboard hints */}
       <Box marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1}>
         <Text color={DIM}>
-          <Text color={ACCENT} bold>j/k or ↓/↑</Text> navigate findings
+          <Text color={ACCENT} bold>
+            j/k or ↓/↑
+          </Text>{" "}
+          navigate findings
           {data.findings.length > 0 ? (
             <>
               {"  ·  "}
-              <Text color={ACCENT} bold>s</Text> toggle summary
+              <Text color={ACCENT} bold>
+                s
+              </Text>{" "}
+              toggle summary
+            </>
+          ) : null}
+          {files.length > 1 ? (
+            <>
+              {"  ·  "}
+              <Text color={ACCENT} bold>
+                f
+              </Text>{" "}
+              filter by file
             </>
           ) : null}
           {"  ·  "}
-          <Text color={ACCENT} bold>q/esc</Text> go back
+          <Text color={ACCENT} bold>
+            r
+          </Text>{" "}
+          refresh
+          {"  ·  "}
+          <Text color={ACCENT} bold>
+            q/esc
+          </Text>{" "}
+          go back
         </Text>
       </Box>
     </Box>

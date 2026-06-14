@@ -8,7 +8,10 @@ import { parsePrLink } from "../engine/prLink.js";
 import type { Forge } from "../engine/types.js";
 
 const program = new Command();
-program.name("codeturtle").description("🐢 Local AI code reviewer — any model, no cloud").version("2.0.0");
+program
+  .name("codeturtle")
+  .description("🐢 Local AI code reviewer — any model, no cloud")
+  .version("2.0.0");
 
 program
   .command("review")
@@ -59,11 +62,14 @@ program
         const expired = c.method === "oauth" && c.expires_at != null && c.expires_at < Date.now();
         const note = expired ? " · token expired (refreshes on next use)" : "";
         console.log(`${forge.padEnd(10)} ✓ ${c.user} (${c.method}, ${c.backend})${note}`);
-      } else if (process.env[`${forge.toUpperCase()}_TOKEN`]) console.log(`${forge.padEnd(10)} ✓ token from env`);
+      } else if (process.env[`${forge.toUpperCase()}_TOKEN`])
+        console.log(`${forge.padEnd(10)} ✓ token from env`);
       else console.log(`${forge.padEnd(10)} ✗ not connected`);
     }
     const rs = reviewerSettings();
-    console.log(`${"reviewer".padEnd(10)} ${rs.apiKey || rs.baseUrl.includes("localhost") ? `✓ ${rs.model}` : "✗ not configured"}`);
+    console.log(
+      `${"reviewer".padEnd(10)} ${rs.apiKey || rs.baseUrl.includes("localhost") ? `✓ ${rs.model}` : "✗ not configured"}`,
+    );
   });
 
 program

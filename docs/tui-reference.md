@@ -30,16 +30,24 @@ The router. On mount it computes `needsSetup` = no forge configured **or** no re
 
 ## `Setup.tsx`
 
-The first-run wizard. Steps: `model → github → githubKey → githubRepo → githubRepoManual →
-gitlab → gitlabKey → done`.
+The first-run wizard. Steps: `model → connect → (githubDevice | githubKey | gitlabKey) →
+githubRepo → githubRepoManual → connected → done`.
+
+You **authenticate once**: the `connect` step is a single menu, and after one successful
+connection you land on the `connected` hub. There is **no forced GitLab gate** — the old
+`model → github → … → gitlab` two-gate flow was the source of the "can't skip GitLab" bug.
 
 - **Model** — delegates to `<ModelPicker>`, writes the `reviewer` config section.
-- **GitHub** — three choices: reuse the `gh auth token` CLI session (`ghCliToken()` shells out
-  to `gh`), paste a PAT, or skip. Tokens are validated against `GET /user` and stored with
-  `backend: "mcp"`.
-- **Repo** — fetches your GitHub repos (`/user/repos?sort=pushed`) and lets you pick one (or type
-  it) to seed `watch.targets` as `github:owner/repo`.
-- **GitLab** — optional PAT, validated against `{url}/api/v4/user`, stored with `backend: "rest"`.
+- **Connect** — one menu listing every auth method: _Sign in with GitHub (OAuth)_ (device flow;
+  needs `GITHUB_CLIENT_ID`), _gh CLI session_ (`ghCliToken()`), _paste a GitHub PAT_, _connect
+  GitLab (token)_. The last item is context-aware: `Skip — set up later` when nothing is
+  connected yet, `← Back` once a forge is connected. GitHub tokens validate against `GET /user`
+  (`backend: "mcp"`); GitLab against `{url}/api/v4/user` (`backend: "rest"`).
+- **GitHub repo** — fetches your repos (`/user/repos?sort=pushed`) and lets you pick one (or type
+  it) to seed `watch.targets` as `github:owner/repo`, then → `connected`.
+- **Connected** — the finish hub. The default item is **Finish** (one Enter → dashboard); the
+  second is **Connect another forge** (→ back to `connect`), so multi-forge stays possible without
+  a reset.
 
 `isConfigured()` (exported) is the predicate `App` uses: true if any forge token exists in the
 store or env.
@@ -75,6 +83,11 @@ The main screen. Responsibilities:
   `pr=… found=… kept=…` / `review failed pr=…` log lines).
 - **Session selection** — on open, asks which configured repo to monitor for this session (or all,
   or a new one, or skip).
+- **Refresh** — both PR lists refetch in place (no loading wipe, selection kept):
+  automatically on the watch cadence (`watch.interval`, default 30s) so raised, closed and
+  merged PRs stay current without keypress, and instantly with `R` for the impatient path.
+  Auto-refresh failures are silent (the list keeps its last good state); manual `R` failures
+  land in the events feed.
 - **Overlays** (`Esc` opens settings): change model (`<ModelPicker>`), manage repos
   (`<RepoPicker>`), reset all config (with a red confirm), or quit. All abort the watcher on exit.
 

@@ -1,0 +1,31 @@
+name: Release
+
+# Publishes to npm via a Trusted Publisher (OIDC) when a version tag is pushed
+# (v2.1.0, …). No NPM_TOKEN secret: configure this repo + workflow under
+# npmjs.com → package → Settings → Trusted Publishers (GitHub Actions,
+# repository jaisuriya97/turtle-code, workflow release.yml). Provenance is
+# generated automatically with trusted publishing.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # npm >= 11.5.1 required for OIDC trusted publishing; Node 22 bundles npm 10
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm publish --access public

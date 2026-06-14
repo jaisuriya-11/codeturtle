@@ -23,24 +23,25 @@ you're on the wrong side of the line.
 
 ## Module map
 
-| Module                | Responsibility                                                                                                        |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `cli/index.ts`        | commander entry. Bare `codeturtle` → TUI. Subcommands: `review`, `status`, `reset`.                                   |
-| `engine/types.ts`     | Core types: `Job`, `Finding`, `ReviewResult`, `FileDiff`, `ContextBundle`, `Norms`, `MrInfo`. Plus `renderContext()`. |
-| `engine/config.ts`    | The `~/.codeturtle` store: `credentials.json`, `config.json`, `resetAll()`. chmod 600. Env-var overrides.             |
-| `engine/providers.ts` | Model-provider registry + local-server model detection.                                                               |
-| `engine/prLink.ts`    | Pasted URL → `{forge, projectId, prNumber}`.                                                                          |
-| `engine/forge.ts`     | `ForgeClient` interface + GitLab REST + GitHub REST fallback + the marker constants.                                  |
-| `engine/forgeMcp.ts`  | GitHub via the official MCP server. Pending-review flow. **Default GitHub backend.**                                  |
-| `engine/norms.ts`     | Built-in defaults merged with the repo's `.codeturtle.yml`; exclude-glob matching.                                    |
-| `engine/repoFiles.ts` | Pure heuristics: parse imports, find exported symbols, guess test paths.                                              |
-| `engine/bundler.ts`   | Builds the context bundle: changed files + imports + callers + tests, ranked & budgeted.                              |
-| `engine/reviewer.ts`  | The LLM call. Strict JSON parse + per-finding validation.                                                             |
-| `engine/poster.ts`    | Inline comments + summary review + labels. Dedup & line-snapping live here.                                           |
-| `engine/state.ts`     | In-process + cross-process locks, event dedup, latest-commit superseding.                                             |
-| `engine/pipeline.ts`  | `runReview()` — the one review entrypoint. Everything goes through it.                                                |
-| `engine/watch.ts`     | Poll watched repos → `runReview` on new PR / new push.                                                                |
-| `tui/*`               | React/Ink components — see the [TUI Reference](./tui-reference.md).                                                   |
+| Module                    | Responsibility                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `cli/index.ts`            | commander entry. Bare `codeturtle` → TUI. Subcommands: `review`, `status`, `reset`.                                      |
+| `engine/types.ts`         | Core types: `Job`, `Finding`, `ReviewResult`, `FileDiff`, `ContextBundle`, `Norms`, `MrInfo`. Plus `renderContext()`.    |
+| `engine/config.ts`        | The `~/.codeturtle` store: `credentials.json`, `config.json`, `resetAll()`. chmod 600. Env-var overrides.                |
+| `engine/providers.ts`     | Model-provider registry + local-server model detection.                                                                  |
+| `engine/prLink.ts`        | Pasted URL → `{forge, projectId, prNumber}`.                                                                             |
+| `engine/forge.ts`         | `ForgeClient` interface + GitLab REST + GitHub REST fallback + the marker constants.                                     |
+| `engine/forgeMcp.ts`      | GitHub via the official MCP server. Pending-review flow. **Default GitHub backend.**                                     |
+| `engine/norms.ts`         | Layered norms: defaults ← global config & packs ← repo `.codeturtle.yml`; runs global transforms; exclude-glob matching. |
+| `engine/normsRegistry.ts` | The norm "plugin" loader: `*.yml` packs + `*.mjs` transforms from `~/.codeturtle/norms`; `mergeNorms`, `safePackName`.   |
+| `engine/repoFiles.ts`     | Pure heuristics: parse imports, find exported symbols, guess test paths.                                                 |
+| `engine/bundler.ts`       | Builds the context bundle: changed files + imports + callers + tests, ranked & budgeted.                                 |
+| `engine/reviewer.ts`      | The LLM call. Strict JSON parse + per-finding validation.                                                                |
+| `engine/poster.ts`        | Inline comments + summary review + labels. Dedup & line-snapping live here.                                              |
+| `engine/state.ts`         | In-process + cross-process locks, event dedup, latest-commit superseding.                                                |
+| `engine/pipeline.ts`      | `runReview()` + `runPushReview()` — the review entrypoints. Everything goes through them.                                |
+| `engine/watch.ts`         | Poll watched repos → `runReview` on new PR / PR push; `runPushReview` on a branch push with no PR.                       |
+| `tui/*`                   | React/Ink components — see the [TUI Reference](./tui-reference.md).                                                      |
 
 Full per-module detail: [Engine Reference](./engine-reference.md).
 
@@ -63,7 +64,8 @@ paste box, and the watcher all converge on it.
    4. postStatus("🐢 reviewing…")              ── sticky note where editable
    5. mr   = forge.getMr()                      ── branches + diff refs
    6. diffs = forge.getDiffs()                  ── per-file unified diffs
-   7. norms = loadNorms(repo .codeturtle.yml)   ── defaults ← repo cfg (agent/key_ref stripped)
+   7. norms = loadNorms(...)                    ── defaults ← global cfg & packs ← repo cfg
+                                                   (agent/key_ref stripped; transforms run last)
    8. filtered = applyExcludes(diffs, norms)    ── drop lockfiles, dist, etc.
    9. context = buildContext(...)               ── changed + imports + callers + tests
   10. result  = review(diff, context, norms)    ── LLM → validated findings

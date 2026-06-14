@@ -1,196 +1,271 @@
-/** Dashboard: paste a PR/MR link OR auto-review watched repos. Live events +
- * review statuses. ESC opens settings (repos / model / reset / quit). */
+/** Dashboard for the chosen repo: opened/closed PR lists fetched live, with the
+ * watcher auto-reviewing new PRs and new pushes to this repo.
+ * Keys: enter review · v view review · tab switch list · R refresh · r change repo · s settings. */
 
 import { Box, Text, useApp, useInput } from "ink";
-import SelectInput from "ink-select-input";
 import Spinner from "ink-spinner";
-import TextInput from "ink-text-input";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-import { loadConfig, loadCredentials, resetAll, reviewerSettings, updateConfig } from "../engine/config.js";
+import {
+  loadConfig,
+  loadCredentials,
+  resetLogin,
+  reviewerConfigured,
+  reviewerSettings,
+  reviewTokenLimit,
+  updateConfig,
+} from "../engine/config.js";
 import { runReview } from "../engine/pipeline.js";
-import { parsePrLink } from "../engine/prLink.js";
-import { parseTarget, watch } from "../engine/watch.js";
-import type { Forge } from "../engine/types.js";
+import { fetchPrList, type PrSummary } from "../engine/viewer.js";
+import { watch } from "../engine/watch.js";
+import { PrList, type PrStatus } from "./dashboard/PrList.js";
+import { SettingsOverlay, type SettingsView } from "./dashboard/SettingsOverlay.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { RepoPicker } from "./RepoPicker.js";
+import type { RepoRef } from "./RepoScreen.js";
 import { ReviewViewer } from "./ReviewViewer.js";
-import { fetchOpenPrs } from "../engine/viewer.js";
 import { ACCENT, DIM, Header, KeyHint } from "./theme.js";
 
-interface ReviewItem {
-  key: string;
-  label: string;
-  forge: Forge;
-  projectId: string;
-  prNumber: number;
-  status: "running" | "done" | "failed";
-  detail: string;
-}
+type Overlay =
+  | "none"
+  | "settings"
+  | "general"
+  | "tokenLimit"
+  | "model"
+  | "repos"
+  | "confirmReset"
+  | "viewReview";
 
-type Overlay = "none" | "settings" | "model" | "repos" | "confirmReset" | "selectReview" | "viewReview";
+type Tab = "open" | "closed";
 
 const ts = () => new Date().toLocaleTimeString();
 
-export function Dashboard({ onReset }: { onReset: () => void }) {
+export function Dashboard({
+  repo,
+  onChangeRepo,
+  onReset,
+}: {
+  repo: RepoRef;
+  onChangeRepo: () => void;
+  onReset: () => void;
+}) {
   const { exit } = useApp();
-  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [tab, setTab] = useState<Tab>("open");
+  const [openPrs, setOpenPrs] = useState<PrSummary[] | null>(null);
+  const [closedPrs, setClosedPrs] = useState<PrSummary[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [statuses, setStatuses] = useState<Record<number, PrStatus>>({});
   const [events, setEvents] = useState<string[]>([]);
-  const [input, setInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [model, setModel] = useState(reviewerSettings().model);
-  const [targets, setTargets] = useState<string[]>(loadConfig().watch?.targets ?? []);
+  const [passes, setPasses] = useState(reviewerSettings().passes);
+  const [tokenLimit, setTokenLimit] = useState(reviewTokenLimit());
+  const [pendingPr, setPendingPr] = useState<number | null>(null);
+  const [viewPr, setViewPr] = useState<number | null>(null);
   const [watching, setWatching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const [sessionRepoSelected, setSessionRepoSelected] = useState(false);
-  const [activeSessionTargets, setActiveSessionTargets] = useState<string[]>([]);
-  const [selectReviewStep, setSelectReviewStep] = useState<"menu" | "paste" | "recent" | "repos" | "prs">("menu");
-  const [selectedRepo, setSelectedRepo] = useState<string>("");
-  const [prsList, setPrsList] = useState<{ iid: number }[]>([]);
-  const [loadingPrs, setLoadingPrs] = useState(false);
-  const [prsError, setPrsError] = useState<string | null>(null);
-  const [selectedPr, setSelectedPr] = useState<{ forge: Forge; projectId: string; prNumber: number } | null>(null);
-  const [viewInputUrl, setViewInputUrl] = useState("");
 
   const creds = loadCredentials();
+  const target = `${repo.forge}:${repo.projectId}`;
   const interval = loadConfig().watch?.interval ?? 30;
+
+  const setStatus = useCallback((prNumber: number, s: PrStatus) => {
+    setStatuses((prev) => ({ ...prev, [prNumber]: s }));
+  }, []);
 
   const addEvent = useCallback((msg: string) => {
     setEvents((prev) => [...prev.slice(-49), `${ts()}  ${msg}`]);
   }, []);
 
-  const patchByPr = useCallback((prNumber: number, fields: Partial<ReviewItem>) => {
-    setReviews((prev) => {
-      // update the most recent running item for that PR number
-      const idx = [...prev].reverse().findIndex((r) => r.prNumber === prNumber && r.status === "running");
-      if (idx === -1) return prev;
-      const real = prev.length - 1 - idx;
-      return prev.map((r, i) => (i === real ? { ...r, ...fields } : r));
-    });
-  }, []);
-
-  // shared log: feeds the event stream AND review statuses
-  const watchLog = useCallback(
+  // pipeline/watcher log → events feed + per-PR status
+  const reviewLog = useCallback(
     (msg: string) => {
       addEvent(msg);
       const found = msg.match(/pr=(\d+) found=\d+ kept=(\d+)/);
-      if (found) patchByPr(Number(found[1]), { status: "done", detail: `${found[2]} findings` });
+      if (found) setStatus(Number(found[1]), { status: "done", detail: `${found[2]} findings` });
       const failed = msg.match(/review failed pr=(\d+)/);
-      if (failed) patchByPr(Number(failed[1]), { status: "failed", detail: msg.slice(0, 60) });
+      if (failed) setStatus(Number(failed[1]), { status: "failed", detail: msg.slice(0, 60) });
+      // early pipeline exits — without these the row sticks on "reviewing…"
+      const skipped = msg.match(
+        /pr=(\d+) (nothing to review|all changed files excluded|superseded|already locked)/,
+      );
+      if (skipped) setStatus(Number(skipped[1]), { status: "done", detail: skipped[2] });
     },
-    [addEvent, patchByPr],
+    [addEvent, setStatus],
   );
 
-  const startWatch = useCallback(
-    (currentTargets: string[]) => {
-      abortRef.current?.abort();
-      if (!currentTargets.length) {
-        setWatching(false);
-        return;
-      }
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
-      setWatching(true);
-      void watch(currentTargets, {
-        intervalSec: interval,
-        log: watchLog,
-        signal: ctrl.signal,
-        onJob: (job) => {
-          setReviews((prev) => [
-            ...prev,
-            {
-              key: `auto:${job.projectId}#${job.prNumber}:${Date.now()}`,
-              label: `${job.projectId}#${job.prNumber}`,
-              forge: job.forge,
-              projectId: job.projectId,
-              prNumber: job.prNumber,
-              status: "running",
-              detail: "auto · reviewing…",
-            },
-          ]);
-        },
-      }).finally(() => setWatching(false));
-    },
-    [interval, watchLog],
-  );
+  const loadPrs = useCallback(async () => {
+    setListError(null);
+    setOpenPrs(null);
+    setClosedPrs(null);
+    setActiveIndex(0);
+    try {
+      const [open, closed] = await Promise.all([
+        fetchPrList(repo.forge, repo.projectId, "open"),
+        fetchPrList(repo.forge, repo.projectId, "closed"),
+      ]);
+      setOpenPrs(open);
+      setClosedPrs(closed);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "failed to load PRs");
+      setOpenPrs([]);
+      setClosedPrs([]);
+    }
+  }, [repo.forge, repo.projectId]);
 
   useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
+    void loadPrs();
+  }, [loadPrs]);
 
-  const startPastedReview = useCallback(
-    (raw: string) => {
-      const ref = parsePrLink(raw);
-      if (!ref) {
-        setError("Couldn't parse that link. Paste a GitHub PR or GitLab MR URL.");
-        return;
+  // refresh (manual R or auto-timer): refetch both lists in place — no loading wipe,
+  // selection kept. A PR raised, closed or merged after the dashboard opened shows up
+  // here; silent mode keeps a flaky network from spamming the events feed.
+  const refreshAll = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (refreshing) return;
+      setRefreshing(true);
+      try {
+        const [open, closed] = await Promise.all([
+          fetchPrList(repo.forge, repo.projectId, "open"),
+          fetchPrList(repo.forge, repo.projectId, "closed"),
+        ]);
+        setListError(null);
+        setOpenPrs(open);
+        setClosedPrs(closed);
+        // selection may point past the end if the active list shrank
+        const current = tab === "open" ? open : closed;
+        setActiveIndex((i) => Math.min(i, Math.max(0, current.length - 1)));
+      } catch (e) {
+        if (!opts?.silent) addEvent(`refresh failed: ${e instanceof Error ? e.message : e}`);
+      } finally {
+        setRefreshing(false);
       }
-      setError(null);
-      const key = `paste:${ref.label}:${Date.now()}`;
-      setReviews((prev) => [
-        ...prev,
-        {
-          key,
-          label: ref.label,
-          forge: ref.forge,
-          projectId: ref.projectId,
-          prNumber: ref.prNumber,
-          status: "running",
-          detail: "fetching…",
-        },
-      ]);
-      addEvent(`manual review ${ref.label}`);
+    },
+    [refreshing, repo.forge, repo.projectId, tab, addEvent],
+  );
 
+  // auto-refresh both lists on the watch cadence: the watcher only signals new
+  // jobs (new PR / push), so closes, merges and title edits need their own poll.
+  const refreshAllRef = useRef(refreshAll);
+  useEffect(() => {
+    refreshAllRef.current = refreshAll;
+  }, [refreshAll]);
+  useEffect(() => {
+    const id = setInterval(() => void refreshAllRef.current({ silent: true }), interval * 1000);
+    return () => clearInterval(id);
+  }, [interval]);
+
+  // a new PR raised while watching should appear in the open list
+  const refreshOpen = useCallback(async () => {
+    try {
+      setOpenPrs(await fetchPrList(repo.forge, repo.projectId, "open"));
+    } catch {
+      // soft refresh — keep the current list on failure
+    }
+  }, [repo.forge, repo.projectId]);
+
+  // the session repo is always watched: new PRs and new pushes get reviewed.
+  // Extra repos added under settings → auto-review keep being watched too.
+  useEffect(() => {
+    const targets = [...new Set([target, ...(loadConfig().watch?.targets ?? [])])];
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setWatching(true);
+    void watch(targets, {
+      intervalSec: loadConfig().watch?.interval ?? 30,
+      log: reviewLog,
+      signal: ctrl.signal,
+      onJob: (job) => {
+        if (`${job.forge}:${job.projectId}` === target) {
+          setStatus(job.prNumber, { status: "running", detail: "auto · reviewing…" });
+          void refreshOpen();
+        }
+      },
+    })
+      .catch((e) => addEvent(`watcher stopped: ${e instanceof Error ? e.message : e}`))
+      .finally(() => setWatching(false));
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  const runOn = useCallback(
+    (prNumber: number) => {
+      setStatus(prNumber, { status: "running", detail: "fetching…" });
       void (async () => {
         try {
           const { getForgeClient } = await import("../engine/forge.js");
-          const gl = await getForgeClient(ref.forge);
+          const gl = await getForgeClient(repo.forge);
           let headSha: string;
           try {
-            headSha = (await gl.getMr(ref.projectId, ref.prNumber)).headSha;
+            headSha = (await gl.getMr(repo.projectId, prNumber)).headSha;
           } finally {
             await gl.close();
           }
           await runReview(
-            { forge: ref.forge, projectId: ref.projectId, prNumber: ref.prNumber, headSha },
-            watchLog,
+            { forge: repo.forge, projectId: repo.projectId, prNumber, headSha },
+            reviewLog,
           );
         } catch (e) {
-          patchByPr(ref.prNumber, {
+          setStatus(prNumber, {
             status: "failed",
             detail: e instanceof Error ? e.message.slice(0, 60) : "error",
           });
         }
       })();
     },
-    [addEvent, patchByPr, watchLog],
+    [repo.forge, repo.projectId, reviewLog, setStatus],
   );
+
+  const startReview = useCallback(
+    (prNumber: number) => {
+      if (!reviewerConfigured()) {
+        // safety net — model is normally set once right after login
+        setPendingPr(prNumber);
+        setOverlay("model");
+        return;
+      }
+      runOn(prNumber);
+    },
+    [runOn],
+  );
+
+  const list = tab === "open" ? openPrs : closedPrs;
+  const selected = list?.[activeIndex] ?? null;
 
   useInput((input, key) => {
     if (overlay === "none") {
-      if (key.escape) {
-        setOverlay("settings");
-      } else if (input === "v") {
-        setOverlay("selectReview");
-        setSelectReviewStep("menu");
-        setViewInputUrl("");
-        setPrsError(null);
-      }
-    } else if (overlay === "settings") {
-      if (key.escape) {
-        setOverlay("none");
-      }
-    } else if (overlay === "selectReview") {
-      if (key.escape) {
-        if (selectReviewStep === "menu") {
-          setOverlay("none");
-        } else if (selectReviewStep === "prs") {
-          setSelectReviewStep("repos");
-        } else {
-          setSelectReviewStep("menu");
+      if (key.tab || key.leftArrow || key.rightArrow) {
+        setTab((t) => (t === "open" ? "closed" : "open"));
+        setActiveIndex(0);
+      } else if ((input === "j" || key.downArrow) && list?.length) {
+        setActiveIndex((i) => (i + 1) % list.length);
+      } else if ((input === "k" || key.upArrow) && list?.length) {
+        setActiveIndex((i) => (i - 1 + list.length) % list.length);
+      } else if (key.return && selected) {
+        if (tab === "open") startReview(selected.iid);
+        else {
+          setViewPr(selected.iid);
+          setOverlay("viewReview");
         }
+      } else if (input === "v" && selected) {
+        setViewPr(selected.iid);
+        setOverlay("viewReview");
+      } else if (input === "R") {
+        void refreshAll();
+      } else if (input === "r") {
+        abortRef.current?.abort();
+        onChangeRepo();
+      } else if (input === "s") {
+        setOverlay("settings");
       }
+    } else if (overlay === "settings" && key.escape) {
+      setOverlay("none");
+    } else if (overlay === "general" && key.escape) {
+      setOverlay("settings");
+    } else if (overlay === "tokenLimit" && key.escape) {
+      setOverlay("general");
     }
   });
 
@@ -199,14 +274,23 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
   if (overlay === "model") {
     return (
       <Box flexDirection="column">
-        <Header subtitle="Change review model" />
+        <Header subtitle={pendingPr ? "Pick a model to start reviewing" : "Change review model"} />
         <ModelPicker
           onDone={(c) => {
             updateConfig("reviewer", {
-              provider: c.provider, api_key: c.apiKey, base_url: c.baseUrl, model: c.model,
+              provider: c.provider,
+              api_key: c.apiKey,
+              base_url: c.baseUrl,
+              model: c.model,
+              token_limit: c.tokenLimit,
             });
             setModel(c.model);
+            setTokenLimit(c.tokenLimit);
             setOverlay("none");
+            if (pendingPr != null) {
+              runOn(pendingPr);
+              setPendingPr(null);
+            }
           }}
         />
       </Box>
@@ -217,390 +301,116 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
     return (
       <Box flexDirection="column">
         <Header subtitle="Auto-review settings" />
-        <RepoPicker
-          onDone={() => {
-            const next = loadConfig().watch?.targets ?? [];
-            setTargets(next);
-            setOverlay("none");
-            if (!sessionRepoSelected) {
-              const newlyAdded = next[next.length - 1];
-              if (newlyAdded) {
-                setActiveSessionTargets([newlyAdded]);
-                startWatch([newlyAdded]);
-              }
-              setSessionRepoSelected(true);
-            } else {
-              setActiveSessionTargets(next);
-              startWatch(next);
-            }
-          }}
-        />
+        <RepoPicker onDone={() => setOverlay("general")} />
       </Box>
     );
   }
 
-  if (overlay === "confirmReset") {
-    return (
-      <Box flexDirection="column">
-        <Header />
-        <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column">
-          <Text color="red" bold>Reset ALL config?</Text>
-          <Text>Deletes tokens, model config, watched repos, and logs from ~/.codeturtle. Cannot be undone.</Text>
-          <Box marginTop={1}>
-            <SelectInput
-              items={[
-                { label: "Cancel", value: "cancel" },
-                { label: "Yes — wipe everything", value: "wipe" },
-              ]}
-              onSelect={(item) => {
-                if (item.value === "wipe") {
-                  abortRef.current?.abort();
-                  resetAll();
-                  onReset();
-                } else setOverlay("none");
-              }}
-            />
-          </Box>
-        </Box>
-      </Box>
-    );
-  }
-
-  if (overlay === "selectReview") {
-    return (
-      <Box flexDirection="column">
-        <Header subtitle="View PR Review" />
-
-        {selectReviewStep === "menu" && (
-          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-            <Text bold color={ACCENT}>Select how to find the PR review:</Text>
-            <Box marginTop={1}>
-              <SelectInput
-                items={[
-                  { label: "← Back to Dashboard", value: "back" },
-                  { label: "Paste a PR/MR Link", value: "paste" },
-                  ...(reviews.some((r) => r.status === "done" || r.status === "failed")
-                    ? [{ label: "Select from recent reviews in this session", value: "recent" }]
-                    : []),
-                  ...(targets.length > 0
-                    ? [{ label: "Select from watched repositories", value: "repos" }]
-                    : []),
-                ]}
-                onSelect={(item) => {
-                  if (item.value === "back") {
-                    setOverlay("none");
-                  } else if (item.value === "paste" || item.value === "recent" || item.value === "repos") {
-                    setSelectReviewStep(item.value);
-                  }
-                }}
-              />
-            </Box>
-          </Box>
-        )}
-
-        {selectReviewStep === "paste" && (
-          <Box flexDirection="column">
-            {prsError ? <Text color="red">{prsError}</Text> : null}
-            <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-              <Text bold color={ACCENT}>Paste PR/MR URL to view review:</Text>
-              <Box marginTop={1} flexDirection="row">
-                <Text color={ACCENT}>{"❯ "}</Text>
-                <TextInput
-                  value={viewInputUrl}
-                  onChange={setViewInputUrl}
-                  placeholder="paste link and press enter"
-                  onSubmit={(val) => {
-                    const parsed = parsePrLink(val.trim());
-                    if (!parsed) {
-                      setPrsError("Invalid PR/MR link format.");
-                      return;
-                    }
-                    setSelectedPr({
-                      forge: parsed.forge,
-                      projectId: parsed.projectId,
-                      prNumber: parsed.prNumber,
-                    });
-                    setOverlay("viewReview");
-                  }}
-                />
-              </Box>
-            </Box>
-            <Box marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1}>
-              <KeyHint keys={[["enter", "submit link"], ["esc", "back to menu"]]} />
-            </Box>
-          </Box>
-        )}
-
-        {selectReviewStep === "recent" && (
-          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-            <Text bold color={ACCENT}>Select a recent review:</Text>
-            <Box marginTop={1}>
-              <SelectInput
-                items={[
-                  { label: "← Back", value: "back" },
-                  ...reviews
-                    .filter((r) => r.status === "done" || r.status === "failed")
-                    .map((r) => ({
-                      label: `${r.projectId}#${r.prNumber} (${r.status}) - ${r.detail}`,
-                      value: r.key,
-                    })),
-                ]}
-                onSelect={(item) => {
-                  if (item.value === "back") {
-                    setSelectReviewStep("menu");
-                  } else {
-                    const r = reviews.find((x) => x.key === item.value);
-                    if (r) {
-                      setSelectedPr({
-                        forge: r.forge,
-                        projectId: r.projectId,
-                        prNumber: r.prNumber,
-                      });
-                      setOverlay("viewReview");
-                    }
-                  }
-                }}
-              />
-            </Box>
-          </Box>
-        )}
-
-        {selectReviewStep === "repos" && (
-          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-            <Text bold color={ACCENT}>Select repository to query open PRs:</Text>
-            <Box marginTop={1}>
-              <SelectInput
-                items={[
-                  { label: "← Back", value: "back" },
-                  ...targets.map((t) => ({ label: t, value: t })),
-                ]}
-                onSelect={async (item) => {
-                  if (item.value === "back") {
-                    setSelectReviewStep("menu");
-                  } else {
-                    setSelectedRepo(item.value);
-                    setLoadingPrs(true);
-                    setPrsError(null);
-                    setSelectReviewStep("prs");
-                    try {
-                      const { forge, repo } = parseTarget(item.value);
-                      const prs = await fetchOpenPrs(forge, repo);
-                      setPrsList(prs);
-                    } catch (err) {
-                      setPrsError(err instanceof Error ? err.message : "Failed to load open PRs");
-                    } finally {
-                      setLoadingPrs(false);
-                    }
-                  }
-                }}
-              />
-            </Box>
-          </Box>
-        )}
-
-        {selectReviewStep === "prs" && (
-          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-            <Text bold color={ACCENT}>Select open PR for {selectedRepo}:</Text>
-            {loadingPrs ? (
-              <Box marginTop={1}>
-                <Text color={ACCENT}>
-                  <Spinner type="dots" />
-                </Text>
-                <Text> Querying open PRs/MRs...</Text>
-              </Box>
-            ) : prsError ? (
-              <Box marginTop={1} flexDirection="column">
-                <Text color="red">Error: {prsError}</Text>
-                <Box marginTop={1}>
-                  <SelectInput
-                    items={[{ label: "← Back to watched repos", value: "back" }]}
-                    onSelect={() => setSelectReviewStep("repos")}
-                  />
-                </Box>
-              </Box>
-            ) : prsList.length === 0 ? (
-              <Box marginTop={1} flexDirection="column">
-                <Text color="yellow">No open PRs/MRs found in this repository.</Text>
-                <Box marginTop={1}>
-                  <SelectInput
-                    items={[{ label: "← Back to watched repos", value: "back" }]}
-                    onSelect={() => setSelectReviewStep("repos")}
-                  />
-                </Box>
-              </Box>
-            ) : (
-              <Box marginTop={1}>
-                <SelectInput
-                  items={[
-                    { label: "← Back to watched repos", value: "back" },
-                    ...prsList.map((pr) => ({
-                      label: `PR #${pr.iid}`,
-                      value: String(pr.iid),
-                    })),
-                  ]}
-                  onSelect={(item) => {
-                    if (item.value === "back") {
-                      setSelectReviewStep("repos");
-                    } else {
-                      const { forge, repo } = parseTarget(selectedRepo);
-                      setSelectedPr({
-                        forge,
-                        projectId: repo,
-                        prNumber: parseInt(item.value, 10),
-                      });
-                      setOverlay("viewReview");
-                    }
-                  }}
-                />
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
-  if (overlay === "viewReview" && selectedPr) {
+  if (overlay === "viewReview" && viewPr != null) {
     return (
       <ReviewViewer
-        forge={selectedPr.forge}
-        projectId={selectedPr.projectId}
-        prNumber={selectedPr.prNumber}
-        onBack={() => {
-          setOverlay("selectReview");
-          setSelectReviewStep("menu");
+        forge={repo.forge}
+        projectId={repo.projectId}
+        prNumber={viewPr}
+        onBack={() => setOverlay("none")}
+      />
+    );
+  }
+
+  if (
+    overlay === "settings" ||
+    overlay === "general" ||
+    overlay === "tokenLimit" ||
+    overlay === "confirmReset"
+  ) {
+    return (
+      <SettingsOverlay
+        view={overlay as SettingsView}
+        model={model}
+        passes={passes}
+        tokenLimit={tokenLimit}
+        onNavigate={(view) => setOverlay(view)}
+        onCyclePasses={() => {
+          // 1 → 2 → 3 → 1: extra passes re-scan with security/logic checklists
+          const next = passes >= 3 ? 1 : passes + 1;
+          updateConfig("reviewer", { passes: next });
+          setPasses(next);
+        }}
+        onSetTokenLimit={(limit) => {
+          updateConfig("reviewer", { token_limit: limit });
+          setTokenLimit(limit);
+        }}
+        onQuit={() => {
+          abortRef.current?.abort();
+          exit();
+        }}
+        onConfirmReset={() => {
+          abortRef.current?.abort();
+          resetLogin();
+          onReset();
         }}
       />
     );
   }
 
-  if (overlay === "settings") {
-    return (
-      <Box flexDirection="column">
-        <Header subtitle="Settings" />
-        <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
-          <SelectInput
-            items={[
-              { label: "← Back", value: "back" },
-              { label: "View PR reviews", value: "view_reviews" },
-              { label: `Auto-review repos  (${targets.length} watched)`, value: "repos" },
-              { label: `Change model  (${model})`, value: "model" },
-              { label: "Reset all config", value: "reset" },
-              { label: "Quit", value: "quit" },
-            ]}
-            onSelect={(item) => {
-              if (item.value === "back") setOverlay("none");
-              else if (item.value === "view_reviews") {
-                setSelectReviewStep("menu");
-                setViewInputUrl("");
-                setPrsError(null);
-                setOverlay("selectReview");
-              }
-              else if (item.value === "repos") setOverlay("repos");
-              else if (item.value === "model") setOverlay("model");
-              else if (item.value === "reset") setOverlay("confirmReset");
-              else {
-                abortRef.current?.abort();
-                exit();
-              }
-            }}
-          />
-        </Box>
-      </Box>
-    );
-  }
-
-  // ---- startup session selection -----------------------------------------------
-  if (!sessionRepoSelected) {
-    const items = [
-      ...targets.map((t) => ({ label: `Monitor: ${t}`, value: t })),
-      ...(targets.length > 1 ? [{ label: "Monitor all configured repos", value: "__all__" }] : []),
-      { label: "✎  watch a new repo", value: "__manual__" },
-      { label: "Skip (just open dashboard)", value: "__skip__" },
-    ];
-    return (
-      <Box flexDirection="column">
-        <Header subtitle="Start Session" />
-        <Text bold>Which repo would you like to monitor and review for this session?</Text>
-        <Box marginTop={1}>
-          <SelectInput
-            items={items}
-            onSelect={(item) => {
-              if (item.value === "__skip__") {
-                setActiveSessionTargets([]);
-                setSessionRepoSelected(true);
-              } else if (item.value === "__all__") {
-                setActiveSessionTargets(targets);
-                setSessionRepoSelected(true);
-                startWatch(targets);
-              } else if (item.value === "__manual__") {
-                setOverlay("repos");
-              } else {
-                const selected = [item.value];
-                setActiveSessionTargets(selected);
-                setSessionRepoSelected(true);
-                startWatch(selected);
-              }
-            }}
-          />
-        </Box>
-      </Box>
-    );
-  }
-
   // ---- main --------------------------------------------------------------------
 
-  const running = reviews.filter((r) => r.status === "running").length;
-  const forgeBits = ["github", "gitlab"]
-    .map((f) => (creds[f]?.user ? `${f} ✓ ${creds[f].user}` : null))
-    .filter(Boolean)
-    .join("   ");
+  const forgeUser = creds[repo.forge]?.user;
+  const counts = {
+    open: openPrs ? String(openPrs.length) : "…",
+    closed: closedPrs ? String(closedPrs.length) : "…",
+  };
+
+  const renderTab = (t: Tab, label: string) => (
+    <Text bold={tab === t} color={tab === t ? ACCENT : DIM}>
+      {tab === t ? "▸ " : "  "}
+      {label} ({counts[t]})
+    </Text>
+  );
 
   return (
     <Box flexDirection="column">
       <Header />
       <Text color={DIM}>
-        {forgeBits || "no forge connected"} · model <Text color={ACCENT}>{model}</Text>
+        repo <Text color={ACCENT}>{repo.projectId}</Text> · {repo.forge}
+        {forgeUser ? ` ✓ ${forgeUser}` : ""} · model <Text color={ACCENT}>{model}</Text>
       </Text>
-      <Text color={DIM}>
-        {watching ? (
-          <>
-            <Text color={ACCENT}><Spinner type="dots" /></Text>
-            {" auto-review: "}{activeSessionTargets.join("  ")}{` · every ${interval}s`}
-          </>
-        ) : (
-          "auto-review off — esc → Auto-review repos to enable"
-        )}
-      </Text>
-
-      <Box flexDirection="column" marginTop={1}>
-        <Text bold>
-          Reviews{running ? <Text color="yellow"> · {running} running</Text> : null}
+      {watching ? (
+        <Text color={DIM}>
+          <Text color={ACCENT}>
+            <Spinner type="dots" />
+          </Text>
+          {" watching — new PRs & pushes get reviewed"}
+          {` · every ${interval}s`}
         </Text>
-        {reviews.length === 0 ? (
-          <Text color={DIM}>None yet — paste a PR link below, or add repos to auto-review.</Text>
-        ) : (
-          reviews.slice(-8).map((r) => (
-            <Text key={r.key}>
-              {r.status === "running" ? (
-                <Text color="yellow"><Spinner type="dots" /></Text>
-              ) : r.status === "done" ? (
-                <Text color={ACCENT}>✓</Text>
-              ) : (
-                <Text color="red">✗</Text>
-              )}{" "}
-              {r.label} <Text color={DIM}>{r.detail}</Text>
-            </Text>
-          ))
-        )}
+      ) : null}
+
+      <Box marginTop={1}>
+        {renderTab("open", "Opened PRs")}
+        <Text color={DIM}>{"   "}</Text>
+        {renderTab("closed", "Closed PRs")}
+        {refreshing ? (
+          <Text color={DIM}>
+            {"   "}
+            <Spinner type="dots" /> refreshing…
+          </Text>
+        ) : null}
       </Box>
+
+      <PrList
+        list={list}
+        tab={tab}
+        activeIndex={activeIndex}
+        statuses={statuses}
+        listError={listError}
+      />
 
       <Box flexDirection="column" marginTop={1}>
         <Text bold>Events</Text>
         {events.length === 0 ? (
           <Text color={DIM}>quiet…</Text>
         ) : (
-          events.slice(-6).map((e, i) => (
+          events.slice(-5).map((e, i) => (
             <Text key={i} color={e.includes("failed") ? "red" : DIM} wrap="truncate">
               {e}
             </Text>
@@ -608,24 +418,17 @@ export function Dashboard({ onReset }: { onReset: () => void }) {
         )}
       </Box>
 
-      <Box marginTop={2} flexDirection="column">
-        {error ? <Text color="red">{error}</Text> : null}
-        <Box borderStyle="round" borderColor={ACCENT} paddingX={1}>
-          <Text color={ACCENT}>{"❯ "}</Text>
-          <TextInput
-            value={input}
-            onChange={setInput}
-            placeholder="paste a GitHub PR / GitLab MR link and press enter"
-            onSubmit={(v) => {
-              if (!v.trim()) return;
-              startPastedReview(v.trim());
-              setInput("");
-            }}
-          />
-        </Box>
-        <Box marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1}>
-          <KeyHint keys={[["enter", "review pasted link"], ["v", "view review"], ["esc", "settings"]]} />
-        </Box>
+      <Box marginTop={1} borderStyle="round" borderColor={DIM} paddingX={1}>
+        <KeyHint
+          keys={[
+            ["enter", tab === "open" ? "review PR" : "view review"],
+            ["v", "view review"],
+            ["tab", "switch list"],
+            ["R", "refresh"],
+            ["r", "change repo"],
+            ["s", "settings"],
+          ]}
+        />
       </Box>
     </Box>
   );

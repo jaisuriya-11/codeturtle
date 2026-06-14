@@ -35,10 +35,37 @@ interface TokenResponse {
   error_description?: string;
 }
 
+// code turtle's published GitHub App client id (public, not a secret).
+export const DEFAULT_GITHUB_CLIENT_ID = "Iv23ctVK4tv3DELTC0JY";
+
+/** Where users install the published code turtle GitHub App. A GitHub App's
+ * OAuth token only reaches repos the app is installed on, so sign-in walks
+ * through installation first and verifies it after the device flow. */
+export const GITHUB_APP_INSTALL_URL = "https://github.com/apps/turle-code";
+
+/** True when the signed-in user's token can see at least one installation of
+ * the app. Null when the check itself failed (network/API) — callers shouldn't
+ * hard-block sign-in on a flaky check. */
+export async function userHasAppInstallation(token: string): Promise<boolean | null> {
+  try {
+    const r = await fetch("https://api.github.com/user/installations", {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) return null;
+    const d = (await r.json()) as { total_count?: number };
+    return Number(d.total_count ?? 0) > 0;
+  } catch {
+    return null;
+  }
+}
+
 /** The OAuth app/GitHub app client id (public, not a secret). Env wins, then
- * the value stored alongside the github credential. No baked-in default. */
+ * the value stored alongside the github credential, then the baked-in default. */
 export function getGithubClientId(): string | undefined {
-  return process.env.GITHUB_CLIENT_ID ?? loadCredentials().github?.client_id ?? undefined;
+  return (
+    process.env.GITHUB_CLIENT_ID ?? loadCredentials().github?.client_id ?? DEFAULT_GITHUB_CLIENT_ID
+  );
 }
 
 async function postForm(url: string, params: Record<string, string>): Promise<any> {
@@ -183,10 +210,14 @@ export async function refreshGithubToken(): Promise<string | undefined> {
   }
 }
 
-/** Refresh-before-use entry point for the forge clients. Non-oauth creds fall
- * straight through to the normal sync resolution. */
+/** Refresh-before-use entry point for the forge clients. App credentials mint
+ * installation tokens; non-oauth creds fall through to sync resolution. */
 export async function ensureFreshGithubToken(): Promise<string | undefined> {
   const cred = loadCredentials().github;
+  if (cred?.method === "app") {
+    const { ensureFreshAppToken } = await import("./githubApp.js");
+    return (await ensureFreshAppToken()) ?? resolveToken("github");
+  }
   if (!cred || cred.method !== "oauth") return resolveToken("github");
   const expiring =
     cred.expires_at != null && cred.refresh_token && cred.expires_at - Date.now() < REFRESH_SKEW_MS;
