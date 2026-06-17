@@ -3,7 +3,7 @@ name: Release
 # Publishes to npm via a Trusted Publisher (OIDC) when a version tag is pushed
 # (v2.1.0, …). No NPM_TOKEN secret: configure this repo + workflow under
 # npmjs.com → package → Settings → Trusted Publishers (GitHub Actions,
-# repository jaisuriya97/turtle-code, workflow release.yml). Provenance is
+# repository jaisuriya97/CodeTurtle, workflow release.yml). Provenance is
 # generated automatically with trusted publishing.
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # create the GitHub Release for the tag
       id-token: write # OIDC token for npm trusted publishing
     steps:
       - uses: actions/checkout@v4
@@ -29,3 +29,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm publish --access public
+      # publish a GitHub Release for the tag so the Releases page tracks npm
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

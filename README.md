@@ -24,7 +24,7 @@
   <a href="https://github.com/jaisuriya97/CodeTurtle/issues"><img src="https://img.shields.io/github/issues/jaisuriya97/CodeTurtle.svg?style=flat-square" alt="Issues" /></a>
   <a href="https://github.com/jaisuriya97/CodeTurtle/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/keep--a--changelog-1.1.0-FF69B4.svg?style=flat-square" alt="Changelog" /></a>
   <a href="https://github.com/jaisuriya97/CodeTurtle"><img src="https://img.shields.io/badge/local--first-100%25-6A1B9A.svg?style=flat-square" alt="Local-first" /></a>
-</p> 
+</p>
 
 ---
 
@@ -212,6 +212,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 
 | Version    | Status  | Description                                                                                                                                                                                                                                        |
 | ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.1.1     | Stable  | Reviewer now catches deletion-induced bugs (a removed declaration still referenced); clean reviews no longer fail when label perms are missing; explicit re-reviews can force past a stale lock.                                                   |
 | v2.1.0     | Stable  | Layered custom norms — personal **global** norms plus reusable **packs** (`.yml`) and **code transforms** (`.mjs`), with `extends` for per-repo opt-in. GitHub OAuth/App sign-in, push reviews, Vitest suite + invariant tests, CI + OIDC release. |
 | v2.0.0     | Stable  | TypeScript rewrite — CLI/TUI reviewing GitHub PRs and GitLab MRs with any OpenAI-compatible model. Python implementation removed. Multi-pass review, provider key validation, watcher and lock failsafes.                                          |
 | Unreleased | Planned | Background daemon (`start` / `logs` / `stop`) · per-language norm packs auto-selected by file type · TUI manager for installed packs.                                                                                                              |

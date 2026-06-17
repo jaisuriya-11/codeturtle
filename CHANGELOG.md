@@ -11,6 +11,27 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Background daemon (`codeturtle start` / `logs` / `stop`) — currently watching runs inside the TUI.
 - Per-language norm packs auto-selected by file type; a TUI manager for installed packs.
 
+## [2.1.1] - 2026-06-17
+
+### Fixed
+
+- **Reviewer missed deletion-induced bugs.** The prompt instructed the model to flag only added
+  (`+`) lines and "never report an issue that lives only on a `-` line", so a deletion that breaks
+  surviving code (e.g. removing `const { x } = y` while `x` is still used) was uncatchable by design.
+  The base prompt and the logic focus pass now carve a deletion-impact exception; evidence may quote
+  the removed `-` line (it is present in the diff text, so the anti-fabrication gate still holds).
+- A label permission gap (e.g. a GitHub App without Issues access → `403` on `issue_read`/`issue_write`)
+  no longer marks an already-posted review as failed — labels are cosmetic and now soft-fail with a log.
+- `package.json` repository/homepage/bugs URLs corrected to the renamed `CodeTurtle` repo, fixing npm
+  provenance validation during release.
+
+### Added
+
+- `force` re-review for explicit user triggers (TUI `enter`, `review` command): steals a stale/held
+  lock and ignores supersede, so a killed run's leftover lock no longer blocks a manual re-review.
+  The watcher never forces — automated reviews keep their one-at-a-time discipline (invariant 7).
+- Under `CT_DEBUG`, findings dropped by validation are logged, making an unexpected `found=0` diagnosable.
+
 ## [2.1.0] - 2026-06-10
 
 ### Added
