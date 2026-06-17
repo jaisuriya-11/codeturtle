@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { recordLatest } from "../state.js";
+import { acquireLock, recordLatest, releaseLock } from "../state.js";
 import type { FileDiff } from "../types.js";
 import { makeFakeForge, type FakeForge } from "./helpers/fakeForge.js";
 
@@ -72,6 +72,25 @@ describe("runReview", () => {
     await runReview(j);
     expect(getForgeClient).not.toHaveBeenCalled();
     expect(review).not.toHaveBeenCalled();
+  });
+
+  it("force re-reviews past a held lock and a superseded head sha", async () => {
+    const j = job();
+    ph.fake = makeFakeForge({ diffs: [diff] });
+    vi.mocked(review).mockResolvedValue({ findings: [], summary: "ok" });
+    recordLatest(j.projectId, j.prNumber, "newer-sha"); // j.headSha is now superseded
+    expect(acquireLock(j.projectId, j.prNumber)).toBe(true); // lock is held
+
+    // without force: both guards skip it before the forge client opens
+    await runReview(j);
+    expect(review).not.toHaveBeenCalled();
+
+    // with force: ignores supersede + steals the lock, runs end-to-end
+    const logs: string[] = [];
+    await runReview(j, (m) => logs.push(m), { force: true });
+    expect(review).toHaveBeenCalledTimes(1);
+    expect(logs.some((m) => m.includes("forcing re-review"))).toBe(true);
+    releaseLock(j.projectId, j.prNumber);
   });
 
   it("reports nothing to review when there are no diffs", async () => {

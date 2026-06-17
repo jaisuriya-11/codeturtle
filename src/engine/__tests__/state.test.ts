@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { acquireLock, isLatest, recordLatest, releaseLock, seenEvent } from "../state.js";
+import {
+  acquireLock,
+  forceLock,
+  isLatest,
+  recordLatest,
+  releaseLock,
+  seenEvent,
+} from "../state.js";
 
 // unique keys per test so the module-scoped in-process maps don't collide
 let n = 0;
@@ -19,6 +26,14 @@ describe("acquireLock / releaseLock", () => {
     expect(acquireLock(pid(), 1)).toBe(false);
     releaseLock(pid(), 1);
     expect(acquireLock(pid(), 1)).toBe(true);
+  });
+
+  it("forceLock steals a held lock so a forced re-review can run", () => {
+    expect(acquireLock(pid(), 1)).toBe(true);
+    expect(acquireLock(pid(), 1)).toBe(false); // held
+    forceLock(pid(), 1); // explicit re-review steals it
+    releaseLock(pid(), 1);
+    expect(acquireLock(pid(), 1)).toBe(true); // free again after the forced run
   });
 });
 

@@ -203,9 +203,11 @@ export function Dashboard({
           } finally {
             await gl.close();
           }
+          // explicit user trigger: force past a stale/held lock and re-review
           await runReview(
             { forge: repo.forge, projectId: repo.projectId, prNumber, headSha },
             reviewLog,
+            { force: true },
           );
         } catch (e) {
           setStatus(prNumber, {

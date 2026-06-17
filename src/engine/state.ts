@@ -82,6 +82,18 @@ export function acquireLock(projectId: string, prNumber: number | string): boole
   }
 }
 
+/** Claim the lock unconditionally, overwriting any in-process or on-disk holder
+ * (e.g. a stale `.lock` file left by a killed run). For explicit user-initiated
+ * re-reviews only — automated triggers must use acquireLock to keep invariant 7. */
+export function forceLock(projectId: string, prNumber: number | string): void {
+  const k = key(projectId, prNumber);
+  const expiry = Date.now() + LOCK_TTL_MS;
+  locks.set(k, expiry);
+  try {
+    writeFileSync(getLockPath(k), String(expiry), "utf8");
+  } catch {}
+}
+
 export function releaseLock(projectId: string, prNumber: number | string): void {
   const k = key(projectId, prNumber);
   locks.delete(k);

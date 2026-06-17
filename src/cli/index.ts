@@ -47,7 +47,8 @@ program
     } finally {
       await gl.close();
     }
-    await runReview({ forge, projectId, prNumber, headSha }, console.log);
+    // an explicit `review` invocation always re-reviews, even if already locked
+    await runReview({ forge, projectId, prNumber, headSha }, console.log, { force: true });
     console.log("done.");
   });
 

@@ -38,15 +38,27 @@ function countAddedLines(diffs: FileDiff[]): number {
   return n;
 }
 
-export async function runReview(job: Job, log: Logger = console.log): Promise<void> {
+export async function runReview(
+  job: Job,
+  log: Logger = console.log,
+  opts: { force?: boolean } = {},
+): Promise<void> {
   const { projectId, prNumber, headSha } = job;
-  if (!state.isLatest(projectId, prNumber, headSha)) {
-    log(`pr=${prNumber} superseded; skipping ${headSha}`);
-    return;
-  }
-  if (!state.acquireLock(projectId, prNumber)) {
-    log(`pr=${prNumber} already locked; skipping`);
-    return;
+  // force = explicit user re-review (TUI enter / `review` command): ignore
+  // supersede + steal a stale/held lock. The watcher never forces, so invariant
+  // 7's one-at-a-time discipline still holds for automated reviews.
+  if (opts.force) {
+    log(`pr=${prNumber} forcing re-review`);
+    state.forceLock(projectId, prNumber);
+  } else {
+    if (!state.isLatest(projectId, prNumber, headSha)) {
+      log(`pr=${prNumber} superseded; skipping ${headSha}`);
+      return;
+    }
+    if (!state.acquireLock(projectId, prNumber)) {
+      log(`pr=${prNumber} already locked; skipping`);
+      return;
+    }
   }
 
   // client construction can fail (token refresh is a network call) — the lock

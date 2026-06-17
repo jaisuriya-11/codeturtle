@@ -27,12 +27,19 @@ How to read the diff — this matters:
 - Before judging a '+' line, compare it with the '-' lines it replaces. If the old
   code was buggy and the new code is correct, the change is a FIX — do not flag it.
   Flag only problems that exist in the NEW code.
-- Never report an issue that lives only on a '-' line or only in unchanged context.
+- Never report an issue that lives only in unchanged context, NOR a pre-existing
+  problem on a '-' line. EXCEPTION: when a '-' line removes something the surviving
+  code still needs — a variable/import declaration, a guard or null-check, or cleanup
+  that a '+' line or unchanged context still relies on — that deletion BREAKS the new
+  code and IS a bug. Flag it (e.g. 'const { x } = y;' deleted but 'x' still used below).
 
 Hard rules:
-- Only comment on lines ADDED in the diff (prefixed '+').
-- Use the new-file line number from the hunk header (@@ -a,b +c,d @@).
-- In "evidence", copy the flagged '+' line VERBATIM from the diff (without the '+').
+- Comment on lines ADDED ('+'), and on '-' deletions that break code which still
+  exists (a removed declaration/import/guard that surviving code still references).
+- Use the new-file line number from the hunk header (@@ -a,b +c,d @@). For a deletion
+  bug, point at the surviving line that now breaks.
+- In "evidence", copy the flagged line VERBATIM from the diff without its +/- prefix —
+  the '+' line for added-code issues, or the removed '-' line for deletion-impact issues.
   A finding whose evidence does not appear in the diff is discarded as fabricated —
   never paraphrase or reconstruct code from memory.
 - Set confidence honestly (0.0-1.0); low-confidence guesses are dropped.
@@ -71,7 +78,9 @@ Walk this checklist over EVERY '+' line in EVERY file, one file at a time:
 - injection: SQL/command/path/HTML built from concatenated input
 Report every hit. If unsure, still report it with lower confidence.`,
   logic: `THIS PASS REVIEWS LOGIC AND CORRECTNESS ONLY — ignore style, naming.
-Walk EVERY '+' line in EVERY file, one file at a time, hunting for:
+Walk EVERY '+' line AND every '-' deletion in EVERY file, one file at a time, hunting for:
+- a '-' deletion that removes a declaration, import, or guard the surviving code still
+  references (e.g. \`const { x } = y;\` deleted but \`x\` used below → ReferenceError)
 - inverted or neutered conditions (comparisons that are now always true/false)
 - emptied or gutted method bodies — cleanup/eviction/purge/close that no longer
   does anything (resource and memory leaks)
@@ -267,9 +276,15 @@ async function runPass(
     return { findings: [], summary: "Reviewer output could not be parsed." };
   }
 
-  const findings = ((data.findings ?? []) as any[])
-    .map(parseFinding)
-    .filter((f): f is Finding => f !== null);
+  const findings: Finding[] = [];
+  for (const rf of (data.findings ?? []) as any[]) {
+    const f = parseFinding(rf);
+    if (f) findings.push(f);
+    else if (process.env.CT_DEBUG)
+      log(
+        `dropped invalid finding: file=${rf?.file} line=${rf?.line} severity=${rf?.severity} category=${rf?.category}`,
+      );
+  }
   return { findings, summary: String(data.summary ?? "") };
 }
 
