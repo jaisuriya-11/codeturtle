@@ -152,6 +152,20 @@ describe("finalize — no duplicate summary, exclusive labels", () => {
     await finalize(gl, "o/r", 1, refs, result, [critical, newWarning], statusId);
     expect(gl.labels).toContain("code-turtle/critical");
   });
+
+  it("does not fail the review when label perms are missing (403)", async () => {
+    const gl = makeFakeForge();
+    const statusId = await gl.postStatus("o/r", 1, "reviewing");
+    // GitHub App without Issues access: addLabels hits issue_read/write → 403
+    gl.addLabels = vi.fn(async () => {
+      throw new Error("403 Resource not accessible by integration");
+    });
+    await expect(
+      finalize(gl, "o/r", 1, refs, { findings: [], summary: "ok" }, [], statusId),
+    ).resolves.toBeUndefined();
+    // the summary review still went out despite the label failure
+    expect(gl.submitted).toHaveLength(1);
+  });
 });
 
 describe("finalizeCommit", () => {

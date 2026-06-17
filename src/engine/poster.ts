@@ -176,12 +176,18 @@ export async function finalize(
   const allCtLabels = ["code-turtle/clean", ...Object.values(LABEL)];
   const want = kept.length && maxSev ? LABEL[maxSev] : !kept.length ? "code-turtle/clean" : null;
   if (want) {
-    await gl.addLabels(projectId, prNumber, [want]);
-    await gl.removeLabels(
-      projectId,
-      prNumber,
-      allCtLabels.filter((l) => l !== want),
-    );
+    // labels are cosmetic — a perm gap (e.g. a GitHub App without Issues access:
+    // 403 on issue_read/write) must not fail an otherwise-posted review
+    try {
+      await gl.addLabels(projectId, prNumber, [want]);
+      await gl.removeLabels(
+        projectId,
+        prNumber,
+        allCtLabels.filter((l) => l !== want),
+      );
+    } catch (e) {
+      log(`labels skipped (${want}): ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   if (
     isReReview &&
