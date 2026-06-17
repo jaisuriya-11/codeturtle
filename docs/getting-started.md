@@ -90,6 +90,17 @@ Running `codeturtle` with no config launches the [`Setup`](./tui-reference.md#se
 1. **Pick a provider & model** — Gemini, Anthropic, OpenAI, OpenRouter, Groq, Ollama (local),
    LM Studio (local), or a custom OpenAI-compatible endpoint. Local servers get live model
    detection. See [`providers.ts`](./engine-reference.md#providersts).
+
+   > **The model must be a chat / instruct LLM (text in → text out).** Code Turtle reviews via
+   > the chat-completions API and expects the model to emit JSON findings. Models that are **not**
+   > chat LLMs will fail with a `404 / "no endpoints found"` or unusable output — avoid anything
+   > tagged **rerank, embedding, vision-only, image / audio generation, or content-safety**
+   > (e.g. `*-rerank-*`, `*-embed-*`, image-gen models). On OpenRouter, filter by **Programming**
+   > or **Text** input and confirm the model page says _instruct / chat / coder / reasoning_.
+   > Use the most capable model you can — small models miss subtle cross-line bugs (e.g. a deleted
+   > declaration that is still referenced). `gemini-2.5-flash` is a reliable default; free
+   > code-capable options include `qwen/qwen3-coder:free` and `meta-llama/llama-3.3-70b-instruct:free`.
+
 2. **Connect a forge (once)** — a single menu with every auth method:
    - **Sign in with GitHub (OAuth device flow)** — shown when `GITHUB_CLIENT_ID` is set; you open
      `github.com/login/device`, enter the code, and Code Turtle polls for the token (refreshed

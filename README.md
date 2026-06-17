@@ -93,7 +93,7 @@ codeturtle          # opens the TUI — first run walks you through setup
 
 **First run walks you through three steps:**
 
-1. **Pick a provider** — Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama (local), LM Studio (local), or any custom OpenAI-compatible endpoint. Local servers get live model detection. Always use a higher / more capable model for better review results.
+1. **Pick a provider & model** — Gemini, Claude, OpenAI, OpenRouter, Groq, Ollama (local), LM Studio (local), or any custom OpenAI-compatible endpoint. Local servers get live model detection. The model **must be a chat / instruct LLM** (text in → text out) — reviews go through the chat-completions API. Avoid rerank, embedding, vision-only, or image/audio-generation models; they fail with `404 / no endpoints`. Use the most capable model you can: `gemini-2.5-flash` is a reliable default; small models miss subtle cross-line bugs.
 2. **Connect a forge (once)** — one menu: sign in with GitHub (OAuth device flow, set `GITHUB_CLIENT_ID`), use your `gh` CLI session, paste a GitHub PAT, or paste a GitLab token. One is enough; you can optionally connect another afterwards.
 3. **Pick repos to watch** — `github:owner/repo gitlab:12345`
 
