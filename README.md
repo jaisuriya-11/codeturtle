@@ -26,7 +26,12 @@
   <a href="https://github.com/jaisuriya97/CodeTurtle"><img src="https://img.shields.io/badge/local--first-100%25-6A1B9A.svg?style=flat-square" alt="Local-first" /></a>
 </p>
 
----
+<p align="center">
+  <a href="https://www.npmjs.com/package/code-turtle">
+    <img src="https://img.shields.io/npm/dt/code-turtle.svg?style=for-the-badge" alt="NPM Stats" />
+  </a>
+</p>
+
 
 <img width="1152" height="720" alt="result" src="https://github.com/user-attachments/assets/5cf98f8f-a4b1-4e6f-a0e3-7cdd0652f4bf" />
 
@@ -220,6 +225,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ---
+
 
 ## License
 
