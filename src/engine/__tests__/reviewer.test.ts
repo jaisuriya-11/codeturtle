@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   queue: [] as string[],
   errors: [] as number[],
   calls: 0,
+  noChoices: false, // emulate compat servers that return a 200 body without `choices`
 }));
 
 vi.mock("openai", () => ({
@@ -22,6 +23,7 @@ vi.mock("openai", () => ({
             const status = h.errors.shift()!;
             throw Object.assign(new Error(`${status} status code`), { status });
           }
+          if (h.noChoices) return { error: { message: "rate-limited" } };
           const c = h.queue.length ? h.queue.shift()! : h.content;
           return { choices: [{ message: { content: c } }] };
         }),
@@ -49,6 +51,7 @@ beforeEach(() => {
   h.queue = [];
   h.errors = [];
   h.calls = 0;
+  h.noChoices = false;
 });
 afterEach(() => {
   delete process.env.REVIEWER_API_KEY;
@@ -188,6 +191,13 @@ describe("review (hostile reviewer output)", () => {
     h.content = "```json\n" + JSON.stringify({ findings: [], summary: "fenced" }) + "\n```";
     const r = await review("diff", ctx, norms);
     expect(r.summary).toBe("fenced");
+  });
+
+  it("returns an empty result when the response body has no choices array", async () => {
+    h.noChoices = true; // OpenRouter free tier returns a 200 error body without `choices`
+    const r = await review("diff", ctx, norms);
+    expect(r.findings).toEqual([]);
+    expect(r.summary).toBe("");
   });
 
   it("returns an empty result for non-JSON output", async () => {

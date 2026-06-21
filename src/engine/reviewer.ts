@@ -255,13 +255,13 @@ async function runPass(
       },
       log,
     );
-    raw = resp.choices[0]?.message?.content ?? "{}";
+    raw = resp.choices?.[0]?.message?.content ?? "{}";
   } catch (e: any) {
     // some compat servers reject response_format — only then strip it and retry;
     // rate limits and server errors above already retried and should surface
     if (![400, 404, 422].includes(e?.status)) throw e;
     const resp = await createWithRetry(client, { model, messages, temperature: 0.2 }, log);
-    raw = resp.choices[0]?.message?.content ?? "{}";
+    raw = resp.choices?.[0]?.message?.content ?? "{}";
   }
 
   raw = raw.trim();
