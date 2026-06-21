@@ -11,6 +11,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Background daemon (`codeturtle start` / `logs` / `stop`) — currently watching runs inside the TUI.
 - Per-language norm packs auto-selected by file type; a TUI manager for installed packs.
 
+## [2.2.0] - 2026-06-21
+
+### Added
+
+- **Code context scrolling and focus navigation.** Use Tab to switch focus to the code pane, and up/down arrows (or j/k keys) to scroll up and down the codebase with a green indicator pointing to the focused line, while keeping the red/yellow/cyan highlight for the error line.
+- Full file fetching support in `fetchCodeSnippet` to allow scrolling beyond the original 11-line window around findings.
+
 ## [2.1.1] - 2026-06-17
 
 ### Fixed
