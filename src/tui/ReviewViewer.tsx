@@ -23,6 +23,9 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
   const [loadingSnippet, setLoadingSnippet] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [fileFilter, setFileFilter] = useState<string | null>(null);
+  const [focusedPane, setFocusedPane] = useState<"findings" | "code">("findings");
+  const [codeScrollOffset, setCodeScrollOffset] = useState(0);
+  const [codeFocusedLine, setCodeFocusedLine] = useState(0);
 
   const files = useMemo(() => [...new Set((data?.findings ?? []).map((f) => f.file))], [data]);
   const findings = useMemo(
@@ -72,6 +75,8 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     return () => clearInterval(t);
   }, []);
 
+  const activeFinding = findings.length > 0 ? findings[activeIndex] : null;
+
   useEffect(() => {
     if (findings.length === 0 || showSummary) {
       setCodeSnippet(null);
@@ -84,7 +89,14 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     async function loadSnippet() {
       setLoadingSnippet(true);
       try {
-        const res = await fetchCodeSnippet(forge, projectId, prNumber, finding.file, finding.line);
+        const res = await fetchCodeSnippet(
+          forge,
+          projectId,
+          prNumber,
+          finding.file,
+          finding.line,
+          true,
+        );
         if (!active) return;
         setCodeSnippet(res);
       } catch (err) {
@@ -100,6 +112,16 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     };
   }, [findings, activeIndex, showSummary, forge, projectId, prNumber]);
 
+  useEffect(() => {
+    if (activeFinding && codeSnippet) {
+      const targetIndex = activeFinding.line - 1;
+      const idealStart = Math.max(0, targetIndex - 5);
+      const maxStart = Math.max(0, codeSnippet.lines.length - 11);
+      setCodeScrollOffset(Math.min(idealStart, maxStart));
+      setCodeFocusedLine(activeFinding.line);
+    }
+  }, [activeIndex, codeSnippet, activeFinding]);
+
   useInput((input, key) => {
     if (key.escape || input === "q") {
       onBack();
@@ -113,7 +135,13 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
 
     if (input === "s") {
       if (data.findings.length > 0) {
-        setShowSummary((prev) => !prev);
+        setShowSummary((prev) => {
+          const next = !prev;
+          if (next) {
+            setFocusedPane("findings");
+          }
+          return next;
+        });
       }
       return;
     }
@@ -123,14 +151,48 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
       const idx = fileFilter ? files.indexOf(fileFilter) : -1;
       setFileFilter(idx + 1 >= files.length ? null : files[idx + 1]);
       setActiveIndex(0);
+      setFocusedPane("findings");
+      return;
+    }
+
+    // tab switches focus between findings list and code context, only if findings exist and summary is not shown
+    if (key.tab && findings.length > 0 && !showSummary) {
+      setFocusedPane((prev) => (prev === "findings" ? "code" : "findings"));
       return;
     }
 
     if (findings.length > 0 && !showSummary) {
-      if (input === "j" || key.downArrow) {
-        setActiveIndex((prev) => (prev + 1) % findings.length);
-      } else if (input === "k" || key.upArrow) {
-        setActiveIndex((prev) => (prev - 1 + findings.length) % findings.length);
+      if (focusedPane === "code") {
+        if (input === "j" || key.downArrow) {
+          setCodeFocusedLine((prev) => {
+            const totalLines = codeSnippet?.lines.length ?? 0;
+            const next = Math.min(prev + 1, totalLines);
+            setCodeScrollOffset((offset) => {
+              if (next > offset + 11) {
+                return next - 11;
+              }
+              return offset;
+            });
+            return next;
+          });
+        } else if (input === "k" || key.upArrow) {
+          setCodeFocusedLine((prev) => {
+            const next = Math.max(1, prev - 1);
+            setCodeScrollOffset((offset) => {
+              if (next < offset + 1) {
+                return next - 1;
+              }
+              return offset;
+            });
+            return next;
+          });
+        }
+      } else {
+        if (input === "j" || key.downArrow) {
+          setActiveIndex((prev) => (prev + 1) % findings.length);
+        } else if (input === "k" || key.upArrow) {
+          setActiveIndex((prev) => (prev - 1 + findings.length) % findings.length);
+        }
       }
     }
   });
@@ -208,7 +270,7 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
     );
   }
 
-  const activeFinding = findings.length > 0 ? findings[activeIndex] : null;
+  // activeFinding is declared above
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -241,13 +303,14 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
           {/* Code Context */}
           <Box
             borderStyle="round"
-            borderColor={ACCENT}
+            borderColor={focusedPane === "code" ? ACCENT : DIM}
             paddingX={1}
             flexDirection="column"
             minHeight={8}
           >
-            <Text bold color={ACCENT}>
-              Code Context: {activeFinding.file}:{activeFinding.line}
+            <Text bold color={focusedPane === "code" ? ACCENT : DIM}>
+              Code Context{focusedPane === "code" ? " (Focused · j/k or ↑/↓ to scroll)" : ""}:{" "}
+              {activeFinding.file}:{activeFinding.line}
             </Text>
             {loadingSnippet ? (
               <Box marginTop={1}>
@@ -258,25 +321,36 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
               </Box>
             ) : codeSnippet ? (
               <Box flexDirection="column" marginTop={1}>
-                {codeSnippet.lines.map((lineText, idx) => {
-                  const currentLineNum = codeSnippet.startLine + idx;
-                  const isTarget = currentLineNum === activeFinding.line;
-                  const linePrefix = isTarget ? "❯❯" : "  ";
-                  let lineColor = DIM;
-                  if (isTarget) {
-                    lineColor =
-                      activeFinding.severity === "critical"
-                        ? "red"
-                        : activeFinding.severity === "warning"
-                          ? "yellow"
-                          : "cyan";
-                  }
-                  return (
-                    <Text key={idx} color={lineColor} bold={isTarget}>
-                      {linePrefix} {String(currentLineNum).padStart(4)} | {lineText}
-                    </Text>
-                  );
-                })}
+                {codeSnippet.lines
+                  .slice(codeScrollOffset, codeScrollOffset + 11)
+                  .map((lineText, index) => {
+                    const idx = codeScrollOffset + index;
+                    const currentLineNum = codeSnippet.startLine + idx;
+                    const isFocused = currentLineNum === codeFocusedLine;
+                    const isErrorLine = currentLineNum === activeFinding.line;
+
+                    const linePrefix = isFocused ? "❯❯" : "  ";
+                    const prefixColor = isFocused ? "green" : DIM;
+
+                    let lineColor = DIM;
+                    if (isErrorLine) {
+                      lineColor =
+                        activeFinding.severity === "critical"
+                          ? "red"
+                          : activeFinding.severity === "warning"
+                            ? "yellow"
+                            : "cyan";
+                    } else if (isFocused) {
+                      lineColor = "white";
+                    }
+
+                    return (
+                      <Text key={idx} color={lineColor} bold={isFocused || isErrorLine}>
+                        <Text color={prefixColor}>{linePrefix}</Text>{" "}
+                        {String(currentLineNum).padStart(4)} | {lineText}
+                      </Text>
+                    );
+                  })}
               </Box>
             ) : (
               <Box marginTop={1}>
@@ -288,7 +362,12 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
           </Box>
 
           {/* Finding Detail */}
-          <Box borderStyle="round" borderColor={ACCENT} paddingX={1} flexDirection="column">
+          <Box
+            borderStyle="round"
+            borderColor={focusedPane === "findings" ? ACCENT : DIM}
+            paddingX={1}
+            flexDirection="column"
+          >
             <Box flexDirection="row">
               <Text
                 bold
@@ -336,9 +415,15 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
 
       {/* BOTTOM PANE: Scrollable Findings List (Quickfix style) */}
       {findings.length > 0 && (
-        <Box borderStyle="round" borderColor={DIM} paddingX={1} flexDirection="column">
-          <Text bold color={DIM}>
+        <Box
+          borderStyle="round"
+          borderColor={focusedPane === "findings" ? ACCENT : DIM}
+          paddingX={1}
+          flexDirection="column"
+        >
+          <Text bold color={focusedPane === "findings" ? ACCENT : DIM}>
             Findings List ({activeIndex + 1}/{findings.length})
+            {focusedPane === "findings" ? " (Focused)" : ""}
             {fileFilter ? <Text color={ACCENT}> · file: {fileFilter}</Text> : null}
           </Text>
           <Box flexDirection="column" marginTop={1}>
@@ -374,7 +459,12 @@ export function ReviewViewer({ forge, projectId, prNumber, onBack }: ReviewViewe
           <Text color={ACCENT} bold>
             j/k or ↓/↑
           </Text>{" "}
-          navigate findings
+          {focusedPane === "code" ? "scroll code" : "navigate findings"}
+          {"  ·  "}
+          <Text color={ACCENT} bold>
+            tab
+          </Text>{" "}
+          switch focus
           {data.findings.length > 0 ? (
             <>
               {"  ·  "}

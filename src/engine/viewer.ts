@@ -142,6 +142,7 @@ export async function fetchCodeSnippet(
   prNumber: number,
   filePath: string,
   line: number,
+  fullFile?: boolean,
 ): Promise<{ lines: string[]; startLine: number } | null> {
   const gl = await getForgeClient(forge);
   try {
@@ -151,6 +152,10 @@ export async function fetchCodeSnippet(
     if (!content) return null;
 
     const allLines = content.split("\n");
+    if (fullFile) {
+      return { lines: allLines, startLine: 1 };
+    }
+
     const totalLines = allLines.length;
 
     const range = 5;
