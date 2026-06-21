@@ -85,6 +85,17 @@ describe("fetchCodeSnippet", () => {
     expect(snip!.lines.length).toBe(11);
   });
 
+  it("returns all lines when fullFile is true", async () => {
+    const content = Array.from({ length: 25 }, (_, i) => `line${i + 1}`).join("\n");
+    hf.fake = makeFakeForge({ files: { "src/a.ts": content } });
+    const snip = await fetchCodeSnippet("github", "o/r", 1, "src/a.ts", 6, true);
+    expect(snip).not.toBeNull();
+    expect(snip!.startLine).toBe(1);
+    expect(snip!.lines.length).toBe(25);
+    expect(snip!.lines[0]).toBe("line1");
+    expect(snip!.lines[24]).toBe("line25");
+  });
+
   it("returns null when the file cannot be fetched", async () => {
     hf.fake = makeFakeForge({ files: {} });
     expect(await fetchCodeSnippet("github", "o/r", 1, "missing.ts", 3)).toBeNull();
