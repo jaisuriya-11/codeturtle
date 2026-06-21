@@ -91,6 +91,15 @@ The main screen. Responsibilities:
 - **Overlays** (`Esc` opens settings): change model (`<ModelPicker>`), manage repos
   (`<RepoPicker>`), reset all config (with a red confirm), or quit. All abort the watcher on exit.
 
+## `ReviewViewer.tsx`
+
+Browsing findings and code context of a posted review. Key elements:
+
+- **Findings List**: displays the list of findings on the PR. Navigate using `j`/`k` or `↓`/`↑`.
+- **Code Context**: shows the code around the finding. Press `Tab` to switch focus to the code pane, and use `j`/`k` or `↓`/`↑` to scroll the codebase viewport, marked with a green focus arrow `❯❯`.
+- **Summary**: toggles the overall PR review summary (`S`).
+- **File Filter**: cycles through files with findings (`F`).
+
 ## `theme.tsx`
 
 The shared look:

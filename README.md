@@ -32,7 +32,6 @@
   </a>
 </p>
 
-
 <img width="1152" height="720" alt="result" src="https://github.com/user-attachments/assets/5cf98f8f-a4b1-4e6f-a0e3-7cdd0652f4bf" />
 
 ## What is Code Turtle?
@@ -69,7 +68,7 @@ It's not another SaaS bot. It's a single binary you install once, point at the m
 - **Idempotent push reviews** — the same marker scheme works for commit comments on plain branch pushes, deduped per head commit.
 - **Custom norms, layered** — built-in defaults ← your personal global norms ← the repo's `.codeturtle.yml` (project wins). Package reusable rule sets as **packs** (`.yml`) or, for power users, **code transforms** (`.mjs`); repos opt into packs by name via `extends`. Reviewer/key overrides and code execution from repo files are **ignored for security**. See the [Custom Norms Guide](docs/custom-norms-guide.md).
 - **GitHub App identity** — reviews can post as `<app-slug>[bot]` (RS256 JWT → installation token, all on your machine). Still no server.
-- **Watch + dashboard** — pick repos, get a live TUI: open/closed PR tabs, auto-watch, events feed, manual refresh (`R`). Watching runs inside the TUI session (a detached background daemon is on the [roadmap](#project-status)).
+- **Watch + dashboard** — pick repos, get a live TUI: open/closed PR tabs, auto-watch, events feed, manual refresh (`R`). Open posted reviews to browse findings, toggle summaries (`S`), filter by file (`F`), and switch focus (`Tab`) to the code context pane to scroll up/down the codebase (`↓`/`↑` or `j`/`k`). Watching runs inside the TUI session (a detached background daemon is on the [roadmap](#project-status)).
 - **Strict reviewer validation** — hostile LLM output is filtered, not trusted; findings below the configured confidence threshold are dropped before posting.
 
 ---
@@ -225,7 +224,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#testing-locally-with-npm-link) and [docs/g
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ---
-
 
 ## License
 
