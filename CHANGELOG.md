@@ -11,6 +11,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Background daemon (`codeturtle start` / `logs` / `stop`) — currently watching runs inside the TUI.
 - Per-language norm packs auto-selected by file type; a TUI manager for installed packs.
 
+## [2.2.1] - 2026-06-21
+
+### Fixed
+
+- **Review crashed on compat servers that return a 200 body without `choices`.** Some OpenAI-compatible endpoints (e.g. OpenRouter free tier under rate limiting) return a `{ error }` payload with HTTP 200 and no `choices` array; the reviewer threw `Cannot read properties of undefined (reading '0')` and failed the PR. It now degrades to an empty result, leaving the PR clean instead of failed.
+
 ## [2.2.0] - 2026-06-21
 
 ### Added

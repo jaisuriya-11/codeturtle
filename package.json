@@ -1,6 +1,6 @@
 {
   "name": "code-turtle",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Local AI code reviewer for GitHub & GitLab — any model, no cloud",
   "scripts": {
     "test": "vitest run",
