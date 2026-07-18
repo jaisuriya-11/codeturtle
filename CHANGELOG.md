@@ -11,6 +11,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - Background daemon (`codeturtle start` / `logs` / `stop`) — currently watching runs inside the TUI.
 - Per-language norm packs auto-selected by file type; a TUI manager for installed packs.
 
+## [2.2.2] - 2026-07-18
+
+### Changed
+
+- Project moved to `https://github.com/jaisuriya-11/codeturtle` — repository, homepage, and
+  issue links updated across `package.json`, the README, and the release workflow.
+
 ## [2.2.1] - 2026-06-21
 
 ### Fixed
