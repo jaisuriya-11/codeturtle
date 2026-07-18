@@ -3,7 +3,7 @@ name: Release
 # Publishes to npm via a Trusted Publisher (OIDC) when a version tag is pushed
 # (v2.1.0, …). No NPM_TOKEN secret: configure this repo + workflow under
 # npmjs.com → package → Settings → Trusted Publishers (GitHub Actions,
-# repository jaisuriya97/CodeTurtle, workflow release.yml). Provenance is
+# repository jaisuriya-11/codeturtle, workflow release.yml). Provenance is
 # generated automatically with trusted publishing.
 on:
   push:

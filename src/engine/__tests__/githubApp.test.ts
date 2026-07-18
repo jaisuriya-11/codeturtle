@@ -60,7 +60,7 @@ describe("inspectApp", () => {
       const u = String(url);
       if (u.endsWith("/app")) return jsonResponse({ slug: "code-turtle", name: "Code Turtle" });
       if (u.endsWith("/app/installations"))
-        return jsonResponse([{ id: 7, account: { login: "jaisuriya97" } }]);
+        return jsonResponse([{ id: 7, account: { login: "jaisuriya-11" } }]);
       throw new Error(`unexpected url ${u}`);
     });
 
@@ -68,7 +68,7 @@ describe("inspectApp", () => {
     expect(info).toEqual({
       slug: "code-turtle",
       name: "Code Turtle",
-      installations: [{ id: 7, account: "jaisuriya97" }],
+      installations: [{ id: 7, account: "jaisuriya-11" }],
     });
     // both calls authenticated with a Bearer JWT
     for (const call of fetchMock.mock.calls) {
@@ -89,7 +89,7 @@ describe("connectGithubApp", () => {
       jsonResponse({ token: "ghs_abc", expires_at: "2099-01-01T00:00:00Z" }, 201),
     );
 
-    await connectGithubApp("12345", PEM, { id: 7, account: "jaisuriya97" }, "code-turtle");
+    await connectGithubApp("12345", PEM, { id: 7, account: "jaisuriya-11" }, "code-turtle");
 
     expect(existsSync(GITHUB_APP_KEY_PATH)).toBe(true);
     expect(readFileSync(GITHUB_APP_KEY_PATH, "utf8")).toBe(PEM);
@@ -125,7 +125,7 @@ describe("connectGithubApp", () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
         jsonResponse({ token: "ghs_win", expires_at: "2099-01-01T00:00:00Z" }, 201),
       );
-      await connectGithubApp("12345", PEM, { id: 7, account: "jaisuriya97" }, "code-turtle");
+      await connectGithubApp("12345", PEM, { id: 7, account: "jaisuriya-11" }, "code-turtle");
       const st = statSync(GITHUB_APP_KEY_PATH);
       expect(st.mode & 0o777).toBe(0o666);
       expect(readFileSync(GITHUB_APP_KEY_PATH, "utf8")).toBe(PEM);
